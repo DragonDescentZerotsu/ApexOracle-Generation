@@ -1,20 +1,20 @@
 defaults:
   - _self_
   - /callbacks: [checkpoint_every_n_steps, checkpoint_monitor, learning_rate_monitor]
-  - /data: lm1b
+  - /data: qm9
   - /model: small
   - /strategy: ddp
   - /noise: loglinear
   - /lr_scheduler: constant_warmup
-  - /classifier_model: null
-  - /guidance: null
+  - /classifier_model: small-classifier
+  - /guidance: cbg_antibiotic # nos_antibiotic / cbg_antibiotic / cbg_synergy
 
-mode: train  # train / train_classifier / ppl_eval
+mode: guide_sample  # train / train_classifier / ppl_eval / guide_sample / gen_ppl_eval
 diffusion: absorbing_state
 backbone: dit  # dit / dimamba / ar
-classifier_backbone: null
+classifier_backbone: dit_reg_cls_AMP  # dit_AMP / dit / dit_reg_cls_AMP / dit_synergy_cls_AMP
 parameterization: subs  # subs / d3pm / ar
-time_conditioning: False
+time_conditioning: True
 subs_masking: False
 zero_recon_loss: False  # Use for UDLM
 T: 0  # 0 (continuous time) / 1000
@@ -23,7 +23,7 @@ is_vision: False
 seed: 1
 
 loader:
-  global_batch_size: 512
+  global_batch_size: 50
   eval_global_batch_size: ${.global_batch_size}
   # Note: batch_size and eval_batch_size are **per machine**
   batch_size: ${div_up:${.global_batch_size}, ${eval:${trainer.devices} * ${trainer.num_nodes}}}
@@ -33,12 +33,69 @@ loader:
   persistent_workers: True
 
 sampling:
-  use_cache: True
-  steps: 128
+  use_cache: False
+  steps: 256
   # Note: batch_size is **per machine**
   batch_size: ${loader.eval_batch_size}
   num_sample_batches: 2  # Total samples: `num_gpus` * `batch_size` * `num_sample_batches`
   use_float64: False
+  pretrained_ckpt_path: /data2/tianang/projects/mdlm/Checkpoints_fangping/last_reg_v1.ckpt #/data2/tianang/projects/mdlm/Checkpoints_fangping/last_reg_v1.ckpt  /   /data2/tianang/projects/mdlm/Checkpoints_fangping/1-314000.ckpt
+  pretrain_backbone_config: /data2/tianang/projects/discrete-diffusion-guidance/configs/config_mdlm_cls.yaml
+  genome_test_emb_dir_path:
+    ATCC_genome_emb: /data2/tianang/projects/Synergy/DataPrepare/Data/Genome_embs   # for ApexOracle
+#    ATCC_genome_emb: /data2/tianang/projects/Ben_ApexOracle_test/DataPrepare/Data/GenomeEmb   # for Ben
+    ATCC_text_emb: /data2/tianang/projects/Synergy/DataPrepare/Data/Text_Description/ATCC/embeddings    # for ApexOracle
+#    ATCC_text_emb: /data2/tianang/projects/Ben_ApexOracle_test/DataPrepare/Data/TextEmb   # for Ben
+    only_text_emb: /data2/tianang/projects/Synergy/DataPrepare/Data/Text_Description/wo_ATCC/embeddings
+  strain: 11775  # BAA-3170 / BAA-3197
+  target_MIC: 1
+  target_MIC_max: 1
+  mol_img_save_dir: /data2/tianang/projects/discrete-diffusion-guidance/outputs/generated_mol_img-new/strain_${.strain}/MIC_${.target_MIC}/length_${.target_length}
+  syn_mol_img_save_dir: /data2/tianang/projects/discrete-diffusion-guidance/outputs/generated_mol_img/strain_${.strain}/syn_${.synergy_mol_name}/length_${.target_length}
+  syn_mol_img_save_dir_no_guide: /data2/tianang/projects/discrete-diffusion-guidance/outputs/generated_mol_img/strain_${.strain}/synoguide_${.synergy_mol_name}/length_${.target_length}
+#  mol_SELFIES_save_dir: /data2/tianang/projects/discrete-diffusion-guidance/outputs/generated_mol_SELFIES-new  # for initial ApexOracle use
+  mol_SELFIES_save_dir: /data2/tianang/projects/discrete-diffusion-guidance/outputs/generated_mol_SELFIES-new  # for initial ApexOracle use
+  gaussian_sigma_min: 0.2
+  gaussian_sigma_max: 0.5
+  target_length: 368
+  peptide_only: True
+  nucleus_p: 0.9
+  remdm:
+    eta: 0.02
+    t_on: 0.55
+    t_off: 0.45
+    alpha_on: 0.5
+  synergy_mol_name:  # Gentamicin
+  synergy_mol_emb_dict_path: /data2/tianang/projects/Synergy/DataPrepare/Data/synergy_mol_emb_dict_cls_wo_pad.pt
+
+#sampling:
+#  use_cache: False
+#  steps: 256
+#  # Note: batch_size is **per machine**
+#  batch_size: ${loader.eval_batch_size}
+#  num_sample_batches: 50  # Total samples: `num_gpus` * `batch_size` * `num_sample_batches`
+#  use_float64: False
+#  pretrained_ckpt_path: /data1/tianang/Projects/mdlm/Checkpoints_fangping/last_reg_v1.ckpt #/data1/tianang/Projects/mdlm/Checkpoints_fangping/last_reg_v1.ckpt  /   /data1/tianang/Projects/mdlm/Checkpoints_fangping/1-314000.ckpt
+#  pretrain_backbone_config: /data1/tianang/Projects/discrete-diffusion-guidance/configs/config_mdlm_cls.yaml
+#  genome_test_emb_dir_path:
+#    ATCC_genome_emb: /data1/tianang/Projects/Synergy/DataPrepare/Data/Genome_embs
+#    ATCC_text_emb: /data1/tianang/Projects/Synergy/DataPrepare/Data/Text_Description/ATCC/embeddings
+#    only_text_emb: /data1/tianang/Projects/Synergy/DataPrepare/Data/Text_Description/wo_ATCC/embeddings
+#  strain: BAA-3170  # BAA-3170 / BAA-3197
+#  target_MIC: 1
+#  target_MIC_max: 1
+#  mol_img_save_dir: /data1/tianang/Projects/discrete-diffusion-guidance/outputs/generated_mol_img/strain_${.strain}/MIC_${.target_MIC}/length_${.target_length}
+#  mol_SELFIES_save_dir: /data1/tianang/Projects/discrete-diffusion-guidance/outputs/generated_mol_SELFIES
+#  gaussian_sigma_min: 0.2
+#  gaussian_sigma_max: 0.5
+#  target_length: 368
+#  peptide_only: True
+#  nucleus_p: 0.9
+#  remdm:
+#    eta: 0.02
+#    t_on: 0.55
+#    t_off: 0.45
+#    alpha_on: 0.5
 
 training:
   ema: 0.9999
@@ -53,7 +110,7 @@ training:
 
 eval:
   checkpoint_path: ''  # Used to evaluate a checkpoint after training.
-  disable_ema: False
+  disable_ema: True
   generate_samples: True
   generated_samples_path: ''
   max_samples: 50_000

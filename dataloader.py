@@ -259,8 +259,7 @@ def get_dataset(
 
   if dataset_name == 'text8':
     assert wrap
-    dataset = get_text8_dataset(
-      cache_dir, max_seq_length=block_size)
+    dataset = get_text8_dataset(cache_dir, max_seq_length=block_size)
   elif dataset_name == 'amazon_polarity':
     dataset = datasets.load_dataset(
       'amazon_polarity',
@@ -479,8 +478,7 @@ def get_dataloaders(config, tokenizer, skip_train=False,
         override_cache=config.data.override_cache,
         add_special_tokens=config.data.add_special_tokens,
         label_col=label_col,
-        label_threshold=getattr(config.data,
-                                'label_col_pctile', None))
+        label_threshold=getattr(config.data, 'label_col_pctile', None))
   if config.data.valid in [
     'text8', 'lm1b', 'amazon_polarity', 'qm9',
     'ten_species']:
@@ -505,8 +503,7 @@ def get_dataloaders(config, tokenizer, skip_train=False,
         override_cache=config.data.override_cache,
         add_special_tokens=config.data.add_special_tokens,
         label_col=label_col,
-        label_threshold=getattr(config.data,
-                                'label_col_pctile', None))
+        label_threshold=getattr(config.data, 'label_col_pctile', None))
 
   if skip_train:
     train_loader = None

@@ -1,8 +1,12 @@
 import json
 import os
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 import fsspec
 import hydra
+from hydra.utils import to_absolute_path
+from flash_attn.utils import pretrained
+from hydra import initialize, compose
 import lightning as L
 import omegaconf
 import rich.syntax
@@ -13,8 +17,14 @@ from tqdm import tqdm
 import classifier
 import dataloader
 import diffusion
+import diffusion_mdlm
 import eval_utils
 import utils
+import models
+from collections import OrderedDict
+from transformers import AutoTokenizer
+from omegaconf import OmegaConf
+from pathlib import Path
 
 omegaconf.OmegaConf.register_new_resolver(
   'cwd', os.getcwd)
@@ -91,10 +101,10 @@ def _print_batch(train_ds, valid_ds, tokenizer, k=64):
     print('ids:', last)
 
 
-def _train(config, logger, tokenizer,
-           train_classifier=False):
+def _train(config, logger, tokenizer, train_classifier=False):
   logger.info('Starting Training.')
   wandb_logger = None
+  config['wandb'] = None  # TODO: for debugging, debug 的时候跳过 wandb 记录
   if config.get('wandb', None) is not None:
     wandb_logger = L.pytorch.loggers.WandbLogger(
       config=omegaconf.OmegaConf.to_object(config),
@@ -114,8 +124,7 @@ def _train(config, logger, tokenizer,
     for _, callback in config.callbacks.items():
       callbacks.append(hydra.utils.instantiate(callback))
 
-  train_ds, valid_ds = dataloader.get_dataloaders(
-    config, tokenizer)
+  train_ds, valid_ds = dataloader.get_dataloaders(config, tokenizer)
   if not config.is_vision:
     _print_batch(train_ds, valid_ds, tokenizer)
 
@@ -124,15 +133,13 @@ def _train(config, logger, tokenizer,
     #   PPLM / NOS-style guidance
     #  (see: https://arxiv.org/abs/2305.20009).
     if getattr(config, 'is_pplm_classifier', False):
-      pretrained_model = _load_from_checkpoint(
-        config, tokenizer)
-      if (getattr(config.classifier_model, 'use_encoder_ema', True)
-          and pretrained_model.ema):
+      pretrained_model = _load_from_checkpoint(config, tokenizer)
+      if (getattr(config.classifier_model, 'use_encoder_ema', True) and pretrained_model.ema):
         pretrained_model.load_ema_params()
       pretrained_backbone = pretrained_model.backbone
       # Remove the last layer for the classifier
       if hasattr(pretrained_backbone, 'output_layer'):  #DiT
-        delattr(pretrained_backbone, 'output_layer')
+        delattr(pretrained_backbone, 'output_layer')   # 用于 embedding 提取，output_layer 直接扔了
       if hasattr(pretrained_backbone, 'model.lm_head'):  #DiMamba
         delattr(pretrained_backbone, 'model.lm_head')
       if getattr(config.classifier_model, 'freeze_encoder', True):
@@ -146,8 +153,7 @@ def _train(config, logger, tokenizer,
       tokenizer=valid_ds.tokenizer,
       pretrained_backbone=pretrained_backbone)
   else:
-    model = diffusion.Diffusion(
-      config, tokenizer=valid_ds.tokenizer)
+    model = diffusion.Diffusion(config, tokenizer=valid_ds.tokenizer)
 
   trainer = hydra.utils.instantiate(
     config.trainer,
@@ -157,17 +163,76 @@ def _train(config, logger, tokenizer,
     logger=wandb_logger)
   trainer.fit(model, train_ds, valid_ds, ckpt_path=ckpt_path)
 
+def guide_sample_AMP(config, tokenizer):
+  # config_pretrained = OmegaConf.load(config.sampling.pretrain_backbone_config)
+  pretrained = diffusion.Diffusion(config, tokenizer=tokenizer).to('cuda')  # 加载 guidance 的 diffusion model
+
+  pretrained_backbone_ckpt = torch.load(config.sampling.pretrained_ckpt_path, map_location='cuda')
+  pretrained_state_dict = pretrained_backbone_ckpt['state_dict']
+  new_sd = OrderedDict()
+  for k, v in pretrained_state_dict.items():
+    if k.startswith('backbone.'):
+      new_key = k[len('backbone.'):]
+    else:
+      new_key = k
+    new_sd[new_key] = v
+
+  pretrained.backbone = models.dit.DIT(config, vocab_size=len(tokenizer.get_vocab()))
+  pretrained.backbone.load_state_dict(new_sd, strict=False)
+  pretrained = pretrained.to('cuda')
+
+  # 这下面就可以大抄特抄 _gen_ppl_eval 了
+  pretrained.eval()
+  samples = []
+  for _ in tqdm(range(config.sampling.num_sample_batches), desc='Gen. batches', leave=False):
+    sample = pretrained.sample_AMP(config=config, tokenizer = tokenizer)
+    sample = eval_utils.extract_valid_SELFIES(sample, tokenizer)
+    # print(sample[0])
+    if len(sample) > 0:
+      decoded_SEFLIES = [SELFIES_str.replace('] [', '][') for SELFIES_str in pretrained.tokenizer.batch_decode(sample)]
+      samples.extend(decoded_SEFLIES)
+
+    # 可视化这些 decode 出来的分子
+  if len(samples) > 0:
+    if config.classifier_backbone != 'dit_synergy_cls_AMP':
+      samples = eval_utils.draw_sampled_mol_fig(samples, Path(config.sampling.mol_img_save_dir), config)
+    else:
+      if config.guidance.method == 'cbg_antibiotic':
+        samples = eval_utils.draw_sampled_mol_fig(samples, Path(config.sampling.syn_mol_img_save_dir_no_guide), config)
+      else:
+        samples = eval_utils.draw_sampled_mol_fig(samples, Path(config.sampling.syn_mol_img_save_dir), config)
+    eval_utils.save_sampled_mols_SEFLIES(samples, config)
+  # for sample in samples:
+  #   print(sample)
+
 
 def _gen_ppl_eval(config, tokenizer):
-  pretrained = _load_from_checkpoint(
-    config=config, tokenizer=tokenizer)
+  pretrained = diffusion.Diffusion(config, tokenizer=tokenizer).to('cuda')  # 加载 guidance 的 diffusion model
+
+  pretrained_backbone_ckpt = torch.load(config.sampling.pretrained_ckpt_path, map_location='cuda')
+  pretrained_state_dict = pretrained_backbone_ckpt['state_dict']
+  new_sd = OrderedDict()
+  for k, v in pretrained_state_dict.items():
+    if k.startswith('backbone.'):
+      new_key = k[len('backbone.'):]
+    else:
+      new_key = k
+    new_sd[new_key] = v
+
+  pretrained.backbone = models.dit.DIT(config, vocab_size=len(tokenizer.get_vocab()))
+  pretrained.backbone.load_state_dict(new_sd, strict=False)
+  pretrained = pretrained.to('cuda')
+
+  # 这下面就可以大抄特抄 _gen_ppl_eval 了
+
+
+  # pretrained = _load_from_checkpoint(config=config, tokenizer=tokenizer)
   pretrained.eval()
   samples = []
   for _ in tqdm(range(config.sampling.num_sample_batches),
                 desc='Gen. batches', leave=False):
     sample = pretrained.sample()
-    samples.extend(
-      pretrained.tokenizer.batch_decode(sample))
+    samples.extend(pretrained.tokenizer.batch_decode(sample))
 
   # Replace CLS token with BOS token (if applicable) and
   # remove padding and mask tokens
@@ -232,16 +297,22 @@ def main(config):
   L.seed_everything(config.seed)
   _print_config(config, resolve=True, save_cfg=True)
 
-  logger = utils.get_logger(__name__)
-  tokenizer = dataloader.get_tokenizer(config)
+  print(f'strain: {config.sampling.strain}')
+  print(f'target length: {config.sampling.target_length}')
 
-  if config.mode == 'gen_ppl_eval':
+  logger = utils.get_logger(__name__)
+  # tokenizer = dataloader.get_tokenizer(config)
+  model_name = "ibm-research/materials.selfies-ted"
+  tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+  if config.mode == 'guide_sample':
+    guide_sample_AMP(config, tokenizer)
+  elif config.mode == 'gen_ppl_eval':
     _gen_ppl_eval(config, tokenizer)
   elif config.mode == 'ppl_eval':
     _ppl_eval(config, tokenizer)
-  elif 'train' in config.mode:
-    _train(config, logger, tokenizer,
-           train_classifier='classifier' in config.mode)
+  elif 'train' in config.mode:  # train classifier 也是从这进来的
+    _train(config, logger, tokenizer, train_classifier='classifier' in config.mode)
   else:
     raise NotImplementedError(f"Mode {config.mode} not implemented.")
 

@@ -23,6 +23,7 @@ import classifier
 import dataloader
 import models
 import noise_schedule
+import selfies as sf
 
 LOG2 = math.log(2)
 
@@ -83,7 +84,7 @@ class Diffusion(L.LightningModule):
     self.config = config
 
     self.tokenizer = tokenizer
-    self.vocab_size = tokenizer.vocab_size
+    self.vocab_size = len(tokenizer.get_vocab())
 
     self.antithetic_sampling = config.training.antithetic_sampling
     self.importance_sampling = config.training.importance_sampling
@@ -854,8 +855,25 @@ class Diffusion(L.LightningModule):
 
   def _sample_prior(self, *batch_dims):
     if self.diffusion == 'absorbing_state':
-      return self.mask_index * torch.ones(
-        *batch_dims, dtype=torch.int64, device=self.device)
+      matrix = torch.ones(*batch_dims, dtype=torch.int64, device=self.device)
+      matrix[:, self.config.sampling.target_length:] = 0
+      # matrix[:, self.config.sampling.target_length] = 0
+
+      matrix = matrix * self.mask_index + (1 - matrix) * self.tokenizer.pad_token_id
+
+      # starting_mols = ['N[C@@H1](CS)C(=O)']
+      # starting_tokens = self.tokenizer(sf.encoder(starting_mols[0]).replace('][', '] ['), return_tensors='pt')['input_ids'][0, :-1].to(self.device)
+      # matrix = matrix * self.mask_index + (1 - matrix) * self.tokenizer.pad_token_id
+      # matrix[:, 0:starting_tokens.shape[0]] = matrix[:, :starting_tokens.shape[0]] + starting_tokens.unsqueeze(0) - self.mask_index
+
+      # for i in range(matrix.shape[0]):
+      #   with open(f'/data2/tianang/projects/discrete-diffusion-guidance/outputs/visualize_gen_process/try_{i+1}.txt', 'w') as f:
+      #     text = self.tokenizer.decode(matrix[i])
+      #     f.write(text + '\n')
+
+      # return matrix * self.mask_index + (1 - matrix) * self.tokenizer.pad_token_id
+      return matrix
+      # return self.mask_index * torch.ones(*batch_dims, dtype=torch.int64, device=self.device)
     if self.diffusion == 'uniform':
       return torch.randint(
         0, self.vocab_size, batch_dims, dtype=torch.int64,
@@ -894,11 +912,59 @@ class Diffusion(L.LightningModule):
         cond = None
       if ((self.parameterization == 'ar' and self.config.guidance.method in {'fudge', 'pplm'})
           or self.config.guidance.method in {'cbg', 'nos'}):
-        classifier_model = classifier.Classifier.load_from_checkpoint(
+        classifier_model = classifier.Classifier.load_from_checkpoint(  # classifier_model 在这呢 TODO: 这个也直接改掉
           self.config.guidance.classifier_checkpoint_path,
           tokenizer=self.tokenizer,
           config=self.config, logger=False).to(self.device)
         classifier_model.eval()
+      else:
+        classifier_model = None
+    else:
+      classifier_model, cond = None, None
+
+    if self.parameterization == 'ar':
+      samples = self._ar_sample(
+        classifier_model=classifier_model, cond=cond)
+    else:  # Diffusion sampling
+      samples = self._diffusion_sample(
+        classifier_model=classifier_model, cond=cond,
+        eps=eps)
+    if not self.config.eval.disable_ema:
+      self._restore_non_ema_params()
+    return samples
+
+  def sample_AMP(self, eps=1e-5, config=None, tokenizer=None):  # Note: differs from self.config.training.sampling_eps
+    """Generate samples from (ema) model.
+
+      Supports both AR and diffusion sampling.
+      Supports:
+        - standard decoding,
+        - classifier-free guidance,
+        - classifier-based guidance
+          - CBG / FUDGE,
+          - NOS / PPLM.
+    """
+    # WARNING: Lightning auto-casting is not working in this method.
+    if not self.config.eval.disable_ema:
+      self.load_ema_params()
+    if getattr(self.config, 'guidance', None) is not None:
+      if self.config.guidance.method == 'cfg':
+        cond = (torch.ones(self.config.sampling.batch_size, device=self.device) *
+                self.config.guidance.condition).to(torch.long)
+      else:
+        cond = None
+      if ((self.parameterization == 'ar' and self.config.guidance.method in {'fudge', 'pplm'}) or self.config.guidance.method in {'cbg', 'nos', 'cbg_antibiotic', 'nos_antibiotic', 'cbg_antibiotic_remdm_loop', 'cbg_antibiotic_remdm_loop_reg_cls'}):
+        classifier_model = classifier.Classifier(
+          config,
+          tokenizer=tokenizer,
+          pretrained_backbone=None)  # pretrained_backbone 是 None 的时候才有手动初始化的机会
+        # classifier_model = classifier.Classifier.load_from_checkpoint(  # classifier_model 在这呢 TODO: 这个也直接改掉
+        #   self.config.guidance.classifier_checkpoint_path,
+        #   tokenizer=self.tokenizer,
+        #   config=self.config, logger=False).to(self.device)
+        classifier_model.eval()
+        classifier_model.classifier_model.load_pretrained_weight()  # TODO: load train好的 regressor 的权重
+        classifier_model = classifier_model.to('cuda')
       else:
         classifier_model = None
     else:
@@ -942,8 +1008,7 @@ class Diffusion(L.LightningModule):
           self.vocab_size)).to(self.device)
     if self.config.sampling.use_float64:
       noise = noise.to(torch.float64)
-    pbar = tqdm(range(num_pred_tokens), desc='AR Sampling',
-                  leave=False)
+    pbar = tqdm(range(num_pred_tokens), desc='AR Sampling', leave=False)
     inference_params = InferenceParams(
       max_seqlen=num_pred_tokens,
       max_batch_size=x.shape[0],
@@ -1118,17 +1183,16 @@ class Diffusion(L.LightningModule):
     cond: typing.Optional[torch.tensor] = None,
     eps: float = 1e-5,  # Note: differs from self.config.training.sampling_eps
   ):
-    xt = self._sample_prior(
+
+    xt = self._sample_prior(  # 这个 prior 就是全是 mask
       self.config.sampling.batch_size,
       self.config.model.length
     ).to(self.device)
 
-    timesteps = torch.linspace(
-      1, eps, self.config.sampling.steps + 1, device=self.device)
+    timesteps = torch.linspace(1, eps, self.config.sampling.steps + 1, device=self.device)
     dt = (1 - eps) / self.config.sampling.steps
-    pbar = tqdm(range(self.config.sampling.steps),
-                desc='Sampling',
-                leave=False)
+
+    pbar = tqdm(range(self.config.sampling.steps), desc='Sampling',leave=False)
     NFEs = 0
     cache = None
 
@@ -1172,7 +1236,7 @@ class Diffusion(L.LightningModule):
             move_chance_t=move_chance_t,
             move_chance_s=move_chance_s,
             cache=cache)
-        elif self.config.guidance.method == 'cbg':
+        elif self.config.guidance.method == 'cbg':  # 这个
           xs, q_xs, cache = self._cbg_denoise(
             classifier_model=classifier_model,
             conditioning_class=self.config.guidance.condition,
@@ -1183,6 +1247,32 @@ class Diffusion(L.LightningModule):
             move_chance_t=move_chance_t,
             move_chance_s=move_chance_s,
             cache=cache)
+        elif self.config.guidance.method == 'cbg_antibiotic':  # 这个
+          xs, q_xs, cache = self._cbg_denoise_antibiotic(
+            classifier_model=classifier_model,
+            conditioning_class=self.config.guidance.condition,
+            gamma=self.config.guidance.gamma,
+            use_approx=self.config.guidance.use_approx,
+            xt=xt,
+            time_conditioning=sigma_t,
+            move_chance_t=move_chance_t,
+            move_chance_s=move_chance_s,
+            cache=cache,
+            step = i+1)
+        elif self.config.guidance.method == 'cbg_antibiotic_remdm_loop':  # 这个
+          xs, q_xs, cache = self._cbg_denoise_antibiotic_remdm_loop(
+            classifier_model=classifier_model,
+            conditioning_class=self.config.guidance.condition,
+            gamma=self.config.guidance.gamma,
+            use_approx=self.config.guidance.use_approx,
+            xt=xt,
+            time_conditioning=sigma_t,
+            move_chance_t=move_chance_t,
+            move_chance_s=move_chance_s,
+            cache=cache,
+            step = i+1,
+            t=t,
+            dt=dt)
         elif self.config.guidance.method == 'nos':
           xs, q_xs, cache = self._nos_denoise(
             classifier_model=classifier_model,
@@ -1194,6 +1284,18 @@ class Diffusion(L.LightningModule):
             time_conditioning=sigma_t,
             move_chance_t=move_chance_t,
             move_chance_s=move_chance_s)
+        elif self.config.guidance.method == 'nos_antibiotic':
+          xs, q_xs, cache = self._nos_denoise_AMP(
+            classifier_model=classifier_model,
+            conditioning_class=self.config.guidance.condition,
+            num_nos_steps=self.config.guidance.num_nos_steps,
+            nos_step_size=self.config.guidance.nos_step_size,
+            nos_stability_coef=self.config.guidance.nos_stability_coef,
+            xt=xt,
+            time_conditioning=sigma_t,
+            move_chance_t=move_chance_t,
+            move_chance_s=move_chance_s,
+            step = i+1)
         else:
           raise NotImplementedError(
             f"Guidance method {self.config.guidance.method} not implemented.")
@@ -1206,6 +1308,14 @@ class Diffusion(L.LightningModule):
         # Disable caching
         cache = None
       xt = xs
+
+    # 再 decode 一次
+    min_t = timesteps[-1].item()
+    t = min_t * torch.ones(xt.shape[0], 1, device=self.device)
+    unet_conditioning = self.noise(t)[0]
+    xt = self.forward(xt, unet_conditioning).argmax(dim=-1)
+
+
     return xt
 
   def _ddpm_denoise(
@@ -1359,25 +1469,22 @@ class Diffusion(L.LightningModule):
       classifier_log_prob = cache['classifier_log_prob']
     else:
       # Diffusion model
-      log_x_theta = self.forward(xt, time_conditioning,
-                                 cond=None)
+      log_x_theta = self.forward(xt, time_conditioning, cond=None)
       # Classifier model
       if use_approx:
-        xt_one_hot = torch.nn.functional.one_hot(
-          xt, self.vocab_size).to(torch.float)
+        xt_one_hot = torch.nn.functional.one_hot(xt, self.vocab_size).to(torch.float)
         with torch.enable_grad():
           xt_one_hot.requires_grad_(True)
-          classifier_log_prob_xt = classifier_model.get_log_probs(
-            xt_one_hot, time_conditioning)
+          classifier_log_prob_xt = classifier_model.get_log_probs(xt_one_hot, time_conditioning)
           classifier_log_prob_xt[..., conditioning_class].sum().backward()
           grad_log_prob_xt = xt_one_hot.grad
 
         classifier_log_prob_ratio = (
             grad_log_prob_xt - (xt_one_hot * grad_log_prob_xt).sum(dim=-1, keepdim=True)
         ).detach().requires_grad_(False)
+
         classifier_log_prob = (
-            classifier_log_prob_ratio +
-            classifier_log_prob_xt[..., conditioning_class][..., None, None]
+            classifier_log_prob_ratio + classifier_log_prob_xt[..., conditioning_class][..., None, None]
         ).detach().requires_grad_(False)
       else:
         # Copied from https://github.com/hnisonoff/discrete_guidance/blob/main/src/fm_utils.py#L441
@@ -1419,10 +1526,8 @@ class Diffusion(L.LightningModule):
 
     # Compute unguided posterior
     if self.diffusion == 'absorbing_state':
-      diffusion_log_probs = log_x_theta + torch.log(
-        1. - (move_chance_s / move_chance_t))
-      diffusion_log_probs[..., self.mask_index] = torch.log(
-        move_chance_s / move_chance_t)[:, :, 0]
+      diffusion_log_probs = log_x_theta + torch.log(1. - (move_chance_s / move_chance_t))
+      diffusion_log_probs[..., self.mask_index] = torch.log(move_chance_s / move_chance_t)[:, :, 0]
       diffusion_log_probs.detach()
     elif self.diffusion == 'uniform':
       diffusion_log_probs = self._compute_posterior(
@@ -1455,6 +1560,442 @@ class Diffusion(L.LightningModule):
     return xs, guided_probs, {'log_x_theta': log_x_theta,
                               'classifier_log_prob': classifier_log_prob}
 
+  def _cbg_denoise_antibiotic(
+      self,
+      conditioning_class: int,
+      gamma: float,
+      classifier_model: classifier.Classifier,
+      xt: torch.tensor,
+      time_conditioning: torch.tensor,
+      move_chance_t: torch.tensor,
+      move_chance_s: torch.tensor,
+      use_approx: bool = False,  # whether to use first-order approximation
+      cache: typing.Optional[typing.Dict[str, torch.Tensor]] = None,
+      step: int = None,
+  ) -> typing.Tuple[torch.tensor, torch.tensor, typing.Dict[str, torch.tensor]]:
+
+    if cache is not None:
+      log_x_theta = cache['log_x_theta']
+      classifier_log_prob = cache['classifier_log_prob']
+    else:
+      # Diffusion model
+      log_x_theta = self.forward(xt, time_conditioning, cond=None)
+      if self.config.sampling.nucleus_p < 1:
+        p_x0 = log_x_theta.exp()
+        sorted_probs, sorted_indices = torch.sort(p_x0, descending=True, dim=-1)
+        cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+        top_p_mask = cumulative_probs <= self.config.sampling.nucleus_p
+        top_p_mask[..., 0] = True
+        nucleus_probs = sorted_probs * top_p_mask
+        nucleus_probs /= nucleus_probs.sum(dim=-1, keepdim=True)
+        p_x0 = torch.zeros_like(p_x0).scatter_(-1, sorted_indices, nucleus_probs)
+        log_x_theta = torch.log(p_x0 + 1e-8)
+      # Classifier model
+      if use_approx:
+        xt_one_hot = torch.nn.functional.one_hot(xt, self.vocab_size).to(torch.float)
+        if self.config.guidance.var_length:
+          backup_shape = xt_one_hot.shape
+          xt_one_hot_backup = xt_one_hot
+          xt_one_hot = xt_one_hot[:, :self.config.sampling.target_length, :]
+        with torch.enable_grad():
+          xt_one_hot.requires_grad_(True)
+          classifier_log_prob_xt = classifier_model.get_log_probs_antibiotic_guaidance(xt_one_hot, time_conditioning, step=step)
+          classifier_log_prob_xt.sum().backward()
+          grad_log_prob_xt = xt_one_hot.grad
+          if self.config.guidance.var_length:
+            true_grad = torch.zeros(backup_shape, device=xt_one_hot.device)
+            true_grad[:, :self.config.sampling.target_length, :] = grad_log_prob_xt
+            grad_log_prob_xt = true_grad
+            xt_one_hot = xt_one_hot_backup
+
+        classifier_log_prob_ratio = (
+            grad_log_prob_xt - (xt_one_hot * grad_log_prob_xt).sum(dim=-1, keepdim=True)
+        ).detach().requires_grad_(False)
+
+        classifier_log_prob = (
+            classifier_log_prob_ratio + classifier_log_prob_xt[..., None]
+        ).detach().requires_grad_(False)
+
+        print(f' classifier_log_prob_xt min: {classifier_log_prob_xt.min()}')
+        print(f' classifier_log_prob_xt max: {classifier_log_prob_xt.max()}')
+        print(f' classifier_log_prob_xt mean: {classifier_log_prob_xt.mean()}')
+
+        print(f' classifier_log_prob_ratio min: {classifier_log_prob_ratio.min()}')
+        print(f' classifier_log_prob_ratio max: {classifier_log_prob_ratio.max()}')
+        print(f' classifier_log_prob_ratio mean: {classifier_log_prob_ratio.mean()}')
+
+        print(f' classifier_log_prob min: {classifier_log_prob.min()}')
+        print(f' classifier_log_prob max: {classifier_log_prob.max()}')
+        print(f' classifier_log_prob mean: {classifier_log_prob.mean()}')
+
+      else:
+        # Copied from https://github.com/hnisonoff/discrete_guidance/blob/main/src/fm_utils.py#L441
+        bsz, seq_len = xt.shape
+        # Create bsz*seq_len*N copies of input sequences
+        # Shape: (bsz, 1, seq_len) -> (bsz, seq_len*N, seq_len)
+        # (where N = vocab_size).
+        xt_expand = xt.unsqueeze(1).repeat(1, seq_len * self.vocab_size, 1)
+        # Flatten batch and transition dimensions
+        # Shape: (bsz, seq_len*N, seq_len) -> (bsz*seq_len*N, seq_len)
+        xt_expand = xt_expand.view(-1, seq_len)
+
+        # Create indices for all possible transitions
+        # Shape: (seq_len*N,) -> (bsz, seq_len*N) -> (bsz*seq_len*N,)
+        jump_idx = torch.arange(seq_len * self.vocab_size).to(xt.device)
+        jump_idx = jump_idx.repeat(bsz, 1).flatten()
+
+        # Create tensor for states after one transition
+        xt_jumps = xt_expand.clone()
+
+        # Calculate which dimension changes for each transition
+        # Shape: (bsz*seq_len*N,)
+        jump_dims = jump_idx // self.vocab_size
+
+        # Calculate new value for changed dimension
+        # Shape: (bsz*seq_len*N,)
+        jump_states = jump_idx % self.vocab_size
+
+        # Apply transitions by assigning new values at transition dimensions
+        # Shape: (bsz*seq_len*N, seq_len)
+        xt_jumps[
+          torch.arange(jump_idx.size(0), device=xt.device),
+          jump_dims,  # Index the transitioned dimension
+        ] = jump_states  # Assign the new state
+
+        classifier_log_prob = classifier_model.get_log_probs_antibiotic_guaidance(
+          xt_jumps, time_conditioning.repeat(seq_len * self.vocab_size)
+        ).reshape(bsz, seq_len, self.vocab_size)
+
+    # Compute unguided posterior
+    if self.diffusion == 'absorbing_state':
+      diffusion_log_probs = log_x_theta + torch.log(1. - (move_chance_s / move_chance_t))
+      diffusion_log_probs[..., self.mask_index] = torch.log(move_chance_s / move_chance_t)[:, :, 0]
+      diffusion_log_probs.detach()
+
+      print(f' diffusion_log_probs min: {diffusion_log_probs.min()}')
+      print(f' diffusion_log_probs max: {diffusion_log_probs.max()}')
+      print(f' diffusion_log_probs mean: {diffusion_log_probs.mean()}')
+
+    elif self.diffusion == 'uniform':
+      diffusion_log_probs = self._compute_posterior(
+        x=log_x_theta.exp(),
+        xt=xt,
+        alpha_s=1 - move_chance_s,
+        alpha_t=1 - move_chance_t).log()
+    else:
+      raise NotImplementedError(
+        f"Diffusion type {self.diffusion} not implemented.")
+
+    # Apply guidance
+    with torch.no_grad():
+      if self.diffusion == 'absorbing_state':
+        guided_log_probs = (gamma * classifier_log_prob) + diffusion_log_probs
+        copy_flag = (xt != self.mask_index)
+        guided_log_probs[copy_flag] = self.neg_infinity
+        guided_log_probs[copy_flag, xt[copy_flag]] = 0.0
+      elif self.diffusion == 'uniform':
+        guided_log_probs = (gamma * classifier_log_prob) + diffusion_log_probs
+      else:
+        raise NotImplementedError(
+          f"Diffusion type {self.diffusion} not implemented.")
+
+    # 禁止生成 '.'
+    vocab = self.tokenizer.get_vocab()
+    token_id_forbid = [vocab[word] for word in vocab.keys() if '.' in word]
+    token_id_forbid += [vocab[word] for word in vocab.keys() if 'I' in word]
+    token_id_forbid += [vocab[word] for word in vocab.keys() if 'Sn' in word]
+    token_id_forbid += [vocab[word] for word in vocab.keys() if 'Br' in word]
+    guided_log_probs[:, :self.config.sampling.target_length, token_id_forbid] = self.neg_infinity
+
+    print(f'\n guided_log_probs min: {guided_log_probs.min()}')
+    print(f' guided_log_probs max: {guided_log_probs.max()}')
+    print(f' guided_log_probs mean: {guided_log_probs.mean()}')
+
+    guided_probs = guided_log_probs.softmax(dim=-1)
+
+    print(f'\n guided_probs min: {guided_probs.min()}')
+    print(f' guided_probs max: {guided_probs.max()}')
+    print(f' guided_probs mean: {guided_probs.mean()}')
+    # Sample from guided posterior
+    xs = _sample_categorical(guided_probs)
+    if self.diffusion == 'absorbing_state':
+      xs = torch.where(copy_flag.to(bool), xt, xs)
+    return xs, guided_probs, {'log_x_theta': log_x_theta,
+                              'classifier_log_prob': classifier_log_prob}
+
+  def _cbg_denoise_antibiotic_remdm_loop(
+      self,
+      conditioning_class: int,
+      gamma: float,
+      classifier_model: classifier.Classifier,
+      xt: torch.tensor,
+      time_conditioning: torch.tensor,
+      move_chance_t: torch.tensor,
+      move_chance_s: torch.tensor,
+      use_approx: bool = False,  # whether to use first-order approximation
+      cache: typing.Optional[typing.Dict[str, torch.Tensor]] = None,
+      step: int = None,
+      t=None,
+      dt=None,
+  ) -> typing.Tuple[torch.tensor, torch.tensor, typing.Dict[str, torch.tensor]]:
+
+    if cache is not None:
+      log_x_theta = cache['log_x_theta']
+      classifier_log_prob = cache['classifier_log_prob']
+    else:
+      # Diffusion model
+      log_x_theta = self.forward(xt, time_conditioning, cond=None)
+      if self.config.sampling.nucleus_p < 1:
+        p_x0 = log_x_theta.exp()
+        sorted_probs, sorted_indices = torch.sort(p_x0, descending=True, dim=-1)
+        cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+        top_p_mask = cumulative_probs <= self.config.sampling.nucleus_p
+        top_p_mask[..., 0] = True
+        nucleus_probs = sorted_probs * top_p_mask
+        nucleus_probs /= nucleus_probs.sum(dim=-1, keepdim=True)
+        log_x_theta = torch.zeros_like(p_x0).scatter_(-1, sorted_indices, nucleus_probs)  # 这个地方直接是概率了不是 log probability
+      # Classifier model
+      if use_approx:
+        xt_one_hot = torch.nn.functional.one_hot(xt, self.vocab_size).to(torch.float)
+        if self.config.guidance.var_length:
+          backup_shape = xt_one_hot.shape
+          xt_one_hot_backup = xt_one_hot
+          xt_one_hot = xt_one_hot[:, :self.config.sampling.target_length, :]
+        with torch.enable_grad():
+          xt_one_hot.requires_grad_(True)
+          classifier_log_prob_xt = classifier_model.get_log_probs_antibiotic_guaidance(xt_one_hot, time_conditioning, step=step)
+          classifier_log_prob_xt.sum().backward()
+          grad_log_prob_xt = xt_one_hot.grad
+          if self.config.guidance.var_length:
+            true_grad = torch.zeros(backup_shape, device=xt_one_hot.device)
+            true_grad[:, :self.config.sampling.target_length, :] = grad_log_prob_xt
+            grad_log_prob_xt = true_grad
+            xt_one_hot = xt_one_hot_backup
+
+        classifier_log_prob_ratio = (
+            grad_log_prob_xt - (xt_one_hot * grad_log_prob_xt).sum(dim=-1, keepdim=True)
+        ).detach().requires_grad_(False)
+
+        classifier_log_prob = (
+            classifier_log_prob_ratio + classifier_log_prob_xt[..., None]
+        ).detach().requires_grad_(False)
+
+        print(f' classifier_log_prob_xt min: {classifier_log_prob_xt.min()}')
+        print(f' classifier_log_prob_xt max: {classifier_log_prob_xt.max()}')
+        print(f' classifier_log_prob_xt mean: {classifier_log_prob_xt.mean()}')
+
+        print(f' classifier_log_prob_ratio min: {classifier_log_prob_ratio.min()}')
+        print(f' classifier_log_prob_ratio max: {classifier_log_prob_ratio.max()}')
+        print(f' classifier_log_prob_ratio mean: {classifier_log_prob_ratio.mean()}')
+
+        print(f' classifier_log_prob min: {classifier_log_prob.min()}')
+        print(f' classifier_log_prob max: {classifier_log_prob.max()}')
+        print(f' classifier_log_prob mean: {classifier_log_prob.mean()}')
+
+      else:
+        # Copied from https://github.com/hnisonoff/discrete_guidance/blob/main/src/fm_utils.py#L441
+        bsz, seq_len = xt.shape
+        # Create bsz*seq_len*N copies of input sequences
+        # Shape: (bsz, 1, seq_len) -> (bsz, seq_len*N, seq_len)
+        # (where N = vocab_size).
+        xt_expand = xt.unsqueeze(1).repeat(1, seq_len * self.vocab_size, 1)
+        # Flatten batch and transition dimensions
+        # Shape: (bsz, seq_len*N, seq_len) -> (bsz*seq_len*N, seq_len)
+        xt_expand = xt_expand.view(-1, seq_len)
+
+        # Create indices for all possible transitions
+        # Shape: (seq_len*N,) -> (bsz, seq_len*N) -> (bsz*seq_len*N,)
+        jump_idx = torch.arange(seq_len * self.vocab_size).to(xt.device)
+        jump_idx = jump_idx.repeat(bsz, 1).flatten()
+
+        # Create tensor for states after one transition
+        xt_jumps = xt_expand.clone()
+
+        # Calculate which dimension changes for each transition
+        # Shape: (bsz*seq_len*N,)
+        jump_dims = jump_idx // self.vocab_size
+
+        # Calculate new value for changed dimension
+        # Shape: (bsz*seq_len*N,)
+        jump_states = jump_idx % self.vocab_size
+
+        # Apply transitions by assigning new values at transition dimensions
+        # Shape: (bsz*seq_len*N, seq_len)
+        xt_jumps[
+          torch.arange(jump_idx.size(0), device=xt.device),
+          jump_dims,  # Index the transitioned dimension
+        ] = jump_states  # Assign the new state
+
+        classifier_log_prob = classifier_model.get_log_probs_antibiotic_guaidance(
+          xt_jumps, time_conditioning.repeat(seq_len * self.vocab_size)
+        ).reshape(bsz, seq_len, self.vocab_size)
+
+    # Compute unguided posterior
+    if self.diffusion == 'absorbing_state':
+
+      if self.config.sampling.nucleus_p < 1:  # 上面可能直接出现就是概率的而不是 log probability 的 log_x_theta
+        p_x0 = log_x_theta
+      else:
+        p_x0 = log_x_theta.exp()
+
+      if t.ndim > 1:
+        t = t.squeeze(-1)  # shape: [batch_size, ]
+      time = t[0].item()
+      # compute alpha_t and alpha_s
+      if time > self.config.sampling.remdm.t_on:
+        gamma = self.config.guidance.var_gamma.gamma_l
+        self.config.guidance.reg_guide_weight = 1.0
+        self.config.guidance.cls_guide_weight = 0.0
+        # self.config.guidance.reg_guide_weight = 0.5
+        # self.config.guidance.cls_guide_weight = 0.5
+        move_chance_t = (1 - (1 - t) * self.config.sampling.remdm.alpha_on / (1 - self.config.sampling.remdm.t_on))[:, None, None]
+        move_chance_s = (1 - (1 - t + dt) * self.config.sampling.remdm.alpha_on / (1 - self.config.sampling.remdm.t_on))[:, None, None]
+      elif time <= self.config.sampling.remdm.t_off:
+        gamma = self.config.guidance.var_gamma.gamma_l
+        self.config.guidance.reg_guide_weight = 1.0
+        self.config.guidance.cls_guide_weight = 0.0
+        # self.config.guidance.reg_guide_weight = 0.5
+        # self.config.guidance.cls_guide_weight = 0.5
+        move_chance_t = (t * (1 - self.config.sampling.remdm.alpha_on) / self.config.sampling.remdm.t_off)[:, None, None]
+        move_chance_s = ((t - dt) * (1 - self.config.sampling.remdm.alpha_on) / self.config.sampling.remdm.t_off)[:, None, None]
+      else:
+        gamma = self.config.guidance.var_gamma.gamma_s
+        self.config.guidance.reg_guide_weight = 0.0
+        self.config.guidance.cls_guide_weight = 1.0
+        # self.config.guidance.reg_guide_weight = 0.5
+        # self.config.guidance.cls_guide_weight = 0.5
+        move_chance_t, move_chance_s = None, None
+      # use MDLM
+      if time > self.config.sampling.remdm.t_on or time <= self.config.sampling.remdm.t_off:
+        # q_xs = p_x0 * (move_chance_t - move_chance_s)
+        # q_xs[:, :, self.mask_index] = move_chance_s[:, :, 0]
+        q_xs = p_x0 * (1. - (move_chance_s / move_chance_t))
+        q_xs[:, :, self.mask_index] = (move_chance_s / move_chance_t)[:, :, 0]
+        diffusion_log_probs = torch.log(q_xs + 1e-8)
+        # _x = _sample_categorical(q_xs)
+        # copy_flag = (x != self.mask_index).to(x.dtype)
+        # xs = copy_flag * x + (1 - copy_flag) * _x
+      else:  # use ReMDM
+        sigma = self.config.sampling.remdm.eta
+        q_xs = p_x0 * (1 - sigma)
+        q_xs[..., self.mask_index] = sigma
+        q_xs_2 = p_x0 * ((self.config.sampling.remdm.alpha_on - (1 - sigma) * self.config.sampling.remdm.alpha_on) / (
+                1 - self.config.sampling.remdm.alpha_on))
+        q_xs_2[..., self.mask_index] = (1 - self.config.sampling.remdm.alpha_on - self.config.sampling.remdm.alpha_on * sigma) / (
+                1 - self.config.sampling.remdm.alpha_on)
+        copy_flag = (xt != self.mask_index).to(torch.bool)
+        q_xs = torch.where(copy_flag.unsqueeze(-1), q_xs, q_xs_2)
+        diffusion_log_probs = torch.log(q_xs + 1e-8)
+        # xs = _sample_categorical(q_xs)
+
+      # diffusion_log_probs = log_x_theta + torch.log(1. - (move_chance_s / move_chance_t))
+      # diffusion_log_probs[..., self.mask_index] = torch.log(move_chance_s / move_chance_t)[:, :, 0]
+      # diffusion_log_probs.detach()
+
+      print(f' diffusion_log_probs min: {diffusion_log_probs.min()}')
+      print(f' diffusion_log_probs max: {diffusion_log_probs.max()}')
+      print(f' diffusion_log_probs mean: {diffusion_log_probs.mean()}')
+
+    elif self.diffusion == 'uniform':
+      diffusion_log_probs = self._compute_posterior(
+        x=log_x_theta.exp(),
+        xt=xt,
+        alpha_s=1 - move_chance_s,
+        alpha_t=1 - move_chance_t).log()
+    else:
+      raise NotImplementedError(
+        f"Diffusion type {self.diffusion} not implemented.")
+
+    # Apply guidance
+    with torch.no_grad():
+      if self.diffusion == 'absorbing_state':
+
+        # use MDLM
+        if time > self.config.sampling.remdm.t_on or time <= self.config.sampling.remdm.t_off:
+          guided_log_probs = (gamma * classifier_log_prob) + diffusion_log_probs
+          copy_flag = (xt != self.mask_index)
+          guided_log_probs[copy_flag] = self.neg_infinity
+          guided_log_probs[copy_flag, xt[copy_flag]] = 0.0
+        # use ReMDM
+        else:
+          guided_log_probs = (gamma * classifier_log_prob) + diffusion_log_probs
+          copy_flag = (xt != self.mask_index)
+          guided_log_probs_copy = guided_log_probs.clone()
+          guided_log_probs[copy_flag] = self.neg_infinity
+          guided_log_probs[copy_flag, xt[copy_flag]] = guided_log_probs_copy[copy_flag, xt[copy_flag]]
+          guided_log_probs[copy_flag, self.mask_index * torch.ones_like(xt[copy_flag])] = guided_log_probs_copy[copy_flag, self.mask_index * torch.ones_like(xt[copy_flag])]
+
+          # 防止padding全都被remask了
+          guided_log_probs[:, self.config.sampling.target_length:, :] = self.neg_infinity
+          guided_log_probs[:, self.config.sampling.target_length:, self.tokenizer.pad_token_id] = 0.0
+
+        # 禁止生成 '.'
+        vocab = self.tokenizer.get_vocab()
+        token_id_forbid = []
+        # forbidden_list = ['.', 'He', 'Li', 'Be', 'B', 'Ne',
+        #                   'Na','Mg','Al','Si', 'Ar','K', 'Ca',
+        #                   'Sc','Ti','V', 'Cr','Mn','Fe','Co','Ni','Cu','Zn',
+        #                   'Ga','Ge','As','Se','Br','Kr','Rb','Sr','Y', 'Zr',
+        #                   'Nb','Mo','Tc','Ru','Rh','Pd','Ag','Cd','In','Sn',
+        #                   'Sb','Te','I', 'Xe','Cs','Ba','La','Ce','Pr','Nd',
+        #                   'Pm','Sm','Eu','Gd','Tb','Dy','Ho','Er','Tm','Yb',
+        #                   'Lu','Hf','Ta','W', 'Re','Os','Ir','Pt','Au','Hg',
+        #                   'Tl','Pb','Bi','Po','At','Rn','Fr','Ra','Ac','Th',
+        #                   'Pa','U', 'Np','Pu','Am','Cm','Bk','Cf','Es','Fm',
+        #                   'Md','No','Lr','Rf','Db','Sg','Bh','Hs','Mt','Ds',
+        #                   'Rg','Cn','Nh','Fl','Mc','Lv','Ts','Og']
+
+        forbidden_list = ['.', 'I', 'Sn', 'Br']
+        for forbiden_id in forbidden_list:
+          token_id_forbid += [vocab[word] for word in vocab.keys() if forbiden_id in word]
+        guided_log_probs[:, :self.config.sampling.target_length, token_id_forbid] = self.neg_infinity
+
+        # valid_ids = ['[CLS]', '[SEP]', '[/N]', '[C@]', '[Branch1]', '[=Branch2]', '[/C]', '[SH1]', '[#Branch1]',
+        #              '[F]', '[=Ring2]', '[=Ring1]', '[\\O]', '[P]', '[Ring2]', '[\\N]', '[C@@]',
+        #             '[=S]', '[C@H1]', '[\\C]', '[OH0]', '[Ring1]', '[=C]', '[OH1]', '[CH1-1]',
+        #              '[N+1]', '[/C@H1]', '[=N]', '[2H]', '[S]', '[\\S]', '[O-1]',
+        #              '[=Branch1]', '[#Branch2]', '[#C]', '[Cl]', '[C-1]', '[Branch2]', '[/S]', '[NH3+1]', '[\\-Ring2]',
+        #              '[NH1]', '[N]', '[B]', '[C]', '[O]', '[=O]', '[C@@H1]', '[Branch3]',
+        #              '[Ring3]', '[/-Ring2]', '[=Branch3]']
+        # token_id_forbid = [vocab[word] for word in vocab.keys() if word not in valid_ids]
+        # guided_log_probs[:, :self.config.sampling.target_length, token_id_forbid] = self.neg_infinity
+
+
+      elif self.diffusion == 'uniform':
+        guided_log_probs = (gamma * classifier_log_prob) + diffusion_log_probs
+      else:
+        raise NotImplementedError(
+          f"Diffusion type {self.diffusion} not implemented.")
+
+    print(f'\n guided_log_probs min: {guided_log_probs.min()}')
+    print(f' guided_log_probs max: {guided_log_probs.max()}')
+    print(f' guided_log_probs mean: {guided_log_probs.mean()}')
+
+    guided_probs = guided_log_probs.softmax(dim=-1)
+
+    print(f'\n guided_probs min: {guided_probs.min()}')
+    print(f' guided_probs max: {guided_probs.max()}')
+    print(f' guided_probs mean: {guided_probs.mean()}')
+
+    # Sample from guided posterior
+    xs = _sample_categorical(guided_probs)
+    xs[:, 0] = self.tokenizer.cls_token_id
+    if self.diffusion == 'absorbing_state':
+      if time > self.config.sampling.remdm.t_on or time <= self.config.sampling.remdm.t_off:
+        xs = torch.where(copy_flag.to(bool), xt, xs)
+    # with open('/data2/tianang/projects/discrete-diffusion-guidance/outputs/visualize_gen_process/try_1.txt', 'a') as f:
+    #   text = self.tokenizer.decode(xs[0])
+    #   f.write(text+'\n')
+
+    # for i in range(xs.shape[0]):
+    #   with open(f'/data2/tianang/projects/discrete-diffusion-guidance/outputs/visualize_gen_process/try_{i + 1}.txt',
+    #             'a') as f:
+    #     text = self.tokenizer.decode(xs[i])
+    #     f.write(text + '\n')
+
+    return xs, guided_probs, {'log_x_theta': log_x_theta,
+                              'classifier_log_prob': classifier_log_prob}
+
   def _nos_denoise(
       self,
       classifier_model: classifier.Classifier,
@@ -1472,12 +2013,9 @@ class Diffusion(L.LightningModule):
     with torch.no_grad():
       time_conditioning = self._process_sigma(time_conditioning)
       with torch.cuda.amp.autocast(dtype=torch.float32):
-        logits, hidden_states = self.backbone(
-          xt, time_conditioning, cond=None,
-          return_hidden_states=True)
+        logits, hidden_states = self.backbone(xt, time_conditioning, cond=None, return_hidden_states=True)
         if self.parameterization == 'subs':
-          log_x_theta = self._subs_parameterization(
-            logits=logits, xt=xt)
+          log_x_theta = self._subs_parameterization(logits=logits, xt=xt)
         elif self.parameterization == 'd3pm':
           # returns log_probs
           if self.subs_masking:  # Can use "zero masking prob"
@@ -1488,10 +2026,8 @@ class Diffusion(L.LightningModule):
           raise NotImplementedError(
             f"Parameterization {self.parameterization} not implemented for NOS guidance.")
         if self.diffusion == 'absorbing_state':
-          diffusion_log_probs = log_x_theta + torch.log(
-            1. - (move_chance_s / move_chance_t))
-          diffusion_log_probs[..., self.mask_index] = torch.log(
-            move_chance_s / move_chance_t)[:, :, 0]
+          diffusion_log_probs = log_x_theta + torch.log(1. - (move_chance_s / move_chance_t))
+          diffusion_log_probs[..., self.mask_index] = torch.log(move_chance_s / move_chance_t)[:, :, 0]
           diffusion_log_probs[copy_flag] = self.neg_infinity
           diffusion_log_probs[copy_flag, xt[copy_flag]] = 0.0
         elif self.diffusion == 'uniform':
@@ -1509,23 +2045,17 @@ class Diffusion(L.LightningModule):
       requires_grad=True)
     optimizer = torch.optim.Adagrad([delta], lr=nos_step_size)
     with torch.enable_grad():
-      for _ in tqdm(range(num_nos_steps),
-                    desc='NOS', leave=False):
+      for _ in tqdm(range(num_nos_steps),desc='NOS', leave=False):
         h_current = hidden_states[-1] + delta
-        target_loss = classifier_model.get_log_probs(
-          xt, time_conditioning, x_emb=h_current)[..., conditioning_class].sum()
+        target_loss = classifier_model.get_log_probs(xt, time_conditioning, x_emb=h_current)[..., conditioning_class].sum()
         with torch.cuda.amp.autocast(dtype=torch.float32):
           new_logits = self.forward(xt, time_conditioning,
                                     cond=None,
                                     x_emb=h_current)
         if self.diffusion == 'absorbing_state':
-          adjusted_log_probs = new_logits + torch.log(
-            1. - (move_chance_s / move_chance_t))
-          adjusted_log_probs[
-            ..., self.mask_index] = torch.log(
-            move_chance_s / move_chance_t)[:, :, 0]
-          adjusted_log_probs[
-            copy_flag] = self.neg_infinity
+          adjusted_log_probs = new_logits + torch.log(1. - (move_chance_s / move_chance_t))
+          adjusted_log_probs[..., self.mask_index] = torch.log(move_chance_s / move_chance_t)[:, :, 0]
+          adjusted_log_probs[copy_flag] = self.neg_infinity
           adjusted_log_probs[copy_flag, xt[copy_flag]] = 0.0
         elif self.diffusion == 'uniform':
           adjusted_log_probs = self._compute_posterior(
@@ -1544,11 +2074,107 @@ class Diffusion(L.LightningModule):
         cond=None,
         x_emb=hidden_states[-1] + delta.data)
     if self.diffusion == 'absorbing_state':
-      diffusion_log_probs = guided_logits + torch.log(
-        1. - (move_chance_s / move_chance_t))
-      diffusion_log_probs[
-        ..., self.mask_index] = torch.log(
-        move_chance_s / move_chance_t)[:, :, 0]
+      diffusion_log_probs = guided_logits + torch.log(1. - (move_chance_s / move_chance_t))
+      diffusion_log_probs[..., self.mask_index] = torch.log(move_chance_s / move_chance_t)[:, :, 0]
+      diffusion_log_probs.detach()
+      guided_probs = diffusion_log_probs.exp()
+    elif self.diffusion == 'uniform':
+      guided_probs = self._compute_posterior(
+        x=guided_logits.exp(),
+        xt=xt,
+        alpha_s=1 - move_chance_s,
+        alpha_t=1 - move_chance_t).detach()
+    else:
+      raise NotImplementedError(
+        f"Diffusion type {self.diffusion} not implemented.")
+
+    xs = _sample_categorical(guided_probs)
+    if self.diffusion == 'absorbing_state':
+      xs = torch.where(copy_flag, xt, xs)
+
+    return xs, guided_probs, None
+
+  def _nos_denoise_AMP(
+      self,
+      classifier_model: classifier.Classifier,
+      num_nos_steps: int,
+      nos_step_size: float,
+      nos_stability_coef: float,
+      conditioning_class: int,
+      xt: torch.Tensor,
+      time_conditioning: torch.tensor,
+      move_chance_t: torch.tensor,
+      move_chance_s: torch.tensor,
+      step: int = None,
+  ) -> typing.Tuple[torch.tensor, torch.tensor, None]:
+    # Compute original diffusion_log_probs and hidden states
+    copy_flag = (xt != self.mask_index).to(torch.bool)
+    with torch.no_grad():
+      time_conditioning = self._process_sigma(time_conditioning)
+      with torch.cuda.amp.autocast(dtype=torch.float32):
+        logits, hidden_states = self.backbone(xt, time_conditioning, cond=None, return_hidden_states=True)
+        if self.parameterization == 'subs':
+          log_x_theta = self._subs_parameterization(logits=logits, xt=xt)
+        elif self.parameterization == 'd3pm':
+          # returns log_probs
+          if self.subs_masking:  # Can use "zero masking prob"
+            logits[:, :,
+            self.mask_index] += self.neg_infinity
+          log_x_theta = logits.log_softmax(dim=-1)
+        else:
+          raise NotImplementedError(
+            f"Parameterization {self.parameterization} not implemented for NOS guidance.")
+        if self.diffusion == 'absorbing_state':
+          diffusion_log_probs = log_x_theta + torch.log(1. - (move_chance_s / move_chance_t))
+          diffusion_log_probs[..., self.mask_index] = torch.log(move_chance_s / move_chance_t)[:, :, 0]
+          diffusion_log_probs[copy_flag] = self.neg_infinity
+          diffusion_log_probs[copy_flag, xt[copy_flag]] = 0.0
+        elif self.diffusion == 'uniform':
+          diffusion_log_probs = self._compute_posterior(
+            x=log_x_theta.exp(),
+            xt=xt,
+            alpha_s=1 - move_chance_s,
+            alpha_t=1 - move_chance_t).log()
+
+    # Perform NOS steps
+    kl_loss = torch.nn.KLDivLoss(reduction='batchmean',
+                                 log_target=True)
+    delta = torch.nn.Parameter(
+      torch.zeros_like(hidden_states[-1]),
+      requires_grad=True)
+    optimizer = torch.optim.Adagrad([delta], lr=nos_step_size)
+    with torch.enable_grad():
+      for _ in tqdm(range(num_nos_steps),desc='NOS', leave=False):
+        h_current = hidden_states[-1] + delta
+        target_loss = classifier_model.get_log_probs_antibiotic_guaidance(xt, time_conditioning, x_emb=h_current, step=step).sum()
+        with torch.cuda.amp.autocast(dtype=torch.float32):
+          new_logits = self.forward(xt, time_conditioning,
+                                    cond=None,
+                                    x_emb=h_current)
+        if self.diffusion == 'absorbing_state':
+          adjusted_log_probs = new_logits + torch.log(1. - (move_chance_s / move_chance_t))
+          adjusted_log_probs[..., self.mask_index] = torch.log(move_chance_s / move_chance_t)[:, :, 0]
+          adjusted_log_probs[copy_flag] = self.neg_infinity
+          adjusted_log_probs[copy_flag, xt[copy_flag]] = 0.0
+        elif self.diffusion == 'uniform':
+          adjusted_log_probs = self._compute_posterior(
+            x=new_logits.exp(),
+            xt=xt,
+            alpha_s=1 - move_chance_s,
+            alpha_t=1 - move_chance_t).log()
+        kl = kl_loss(adjusted_log_probs, diffusion_log_probs)
+        loss = -target_loss + nos_stability_coef * kl
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    with torch.cuda.amp.autocast(dtype=torch.float32):
+      guided_logits = self.forward(
+        xt, time_conditioning,
+        cond=None,
+        x_emb=hidden_states[-1] + delta.data)
+    if self.diffusion == 'absorbing_state':
+      diffusion_log_probs = guided_logits + torch.log(1. - (move_chance_s / move_chance_t))
+      diffusion_log_probs[..., self.mask_index] = torch.log(move_chance_s / move_chance_t)[:, :, 0]
       diffusion_log_probs.detach()
       guided_probs = diffusion_log_probs.exp()
     elif self.diffusion == 'uniform':

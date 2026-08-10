@@ -157,8 +157,13 @@ class Classifier(L.LightningModule):
       self.mask_index = self.tokenizer.mask_token_id
 
     if config.classifier_backbone == 'dit':
-      self.classifier_model = models.dit.DITClassifier(
-        self.config, vocab_size=self.vocab_size)
+      self.classifier_model = models.dit.DITClassifier(self.config, vocab_size=self.vocab_size)
+    elif self.config.classifier_backbone == 'dit_AMP':
+      self.classifier_model = models.dit.DITClassifier_AMP(self.config, vocab_size=len(self.tokenizer.get_vocab()))
+    elif self.config.classifier_backbone == 'dit_reg_cls_AMP':
+      self.classifier_model = models.dit.DIT_Reg_Cls_AMP(self.config, vocab_size=len(self.tokenizer.get_vocab()))
+    elif self.config.classifier_backbone == 'dit_synergy_cls_AMP':
+      self.classifier_model = models.dit.DIT_Syn_Cls_Pep_Cls_AMP(self.config, vocab_size=len(self.tokenizer.get_vocab()))
     elif self.config.classifier_backbone == 'dimamba':
       self.classifier_model = models.dimamba.DiMambaClassifier(
         self.config, vocab_size=self.vocab_size,
@@ -204,8 +209,7 @@ class Classifier(L.LightningModule):
     self.valid_metrics = metrics.clone(prefix='val/')
 
     self.T = config.T
-    self.noise = noise_schedule.get_noise(config,
-                                          dtype=self.dtype)
+    self.noise = noise_schedule.get_noise(config,dtype=self.dtype)
     self.sampling_eps = config.training.sampling_eps
     self.lr = config.optim.lr
     self.time_conditioning = config.time_conditioning
@@ -297,7 +301,7 @@ class Classifier(L.LightningModule):
         ))
     self.trainer.fit_loop._combined_loader.flattened = updated_dls
 
-  def forward(self, x, sigma=None, x_emb=None, attention_mask=None):
+  def forward(self, x, sigma=None, x_emb=None, attention_mask=None, step=None):
     """Returns logits.
 
       x_emb can be provided during PPLM / NoS-style guidance
@@ -310,7 +314,7 @@ class Classifier(L.LightningModule):
     else:
       sigma = self._process_sigma(sigma) if sigma is not None else sigma
       with torch.cuda.amp.autocast(dtype=torch.float32):
-        logits = self.classifier_model(x, sigma, x_emb=x_emb, attention_mask=attention_mask)
+        logits = self.classifier_model(x, sigma, x_emb=x_emb, attention_mask=attention_mask, step=step)
     return logits
 
   def get_log_probs(self, x, sigma, x_emb=None):
@@ -323,8 +327,19 @@ class Classifier(L.LightningModule):
         'that are meant to be used for evaluation purposes '
         'only.')
     with torch.cuda.amp.autocast(dtype=torch.float32):
-      return torch.nn.functional.log_softmax(
-        self.forward(x, sigma, x_emb=x_emb), dim=-1)
+      return torch.nn.functional.log_softmax(self.forward(x, sigma, x_emb=x_emb), dim=-1)
+
+  def get_log_probs_antibiotic_guaidance(self, x, sigma, x_emb=None, step=None):
+    """Returns log probabilities.
+      Use for CBG-style guidance.
+    """
+    if self.is_eval_classifier:
+      raise NotImplementedError(
+        '`get_log_prob` not implemented for classifiers '
+        'that are meant to be used for evaluation purposes '
+        'only.')
+    with torch.cuda.amp.autocast(dtype=torch.float32):
+      return self.forward(x, sigma, x_emb=x_emb, step=step)
 
   def training_step(self, batch, batch_idx):
     loss = self._compute_loss(batch, prefix='train')
@@ -400,8 +415,7 @@ class Classifier(L.LightningModule):
       logits = self.forward(x0)
     elif self.config.parameterization == 'ar':
       # do not add noise for AR FUDGE and AR PPLM
-      logits = self.forward(
-        x0, attention_mask=attention_mask)
+      logits = self.forward(x0, attention_mask=attention_mask)
     else:
       t = self._sample_t(x0.shape[0])
       if self.T > 0:
@@ -477,8 +491,7 @@ class Classifier(L.LightningModule):
       _eps_t = (_eps_t / n + offset) % 1
     t = (1 - self.sampling_eps) * _eps_t + self.sampling_eps
     if self.importance_sampling:
-      return self.noise.importance_sampling_transformation(
-        t)
+      return self.noise.importance_sampling_transformation(t)
     return t
 
   def _process_sigma(self, sigma):

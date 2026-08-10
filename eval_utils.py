@@ -5,6 +5,12 @@ import transformers
 from tqdm import tqdm
 
 import diffusion
+import selfies as sf
+from rdkit import Chem
+from rdkit.Chem import Draw
+
+from pathlib import Path
+import shutil
 
 
 def compute_ppl(
@@ -88,3 +94,94 @@ def compute_generative_ppl(
       gen_ppl_metric.update(
         nlls, attn_mask_chunk[..., 1:])
   return gen_ppl_metric.compute().item()
+
+def draw_sampled_mol_fig(samples, mol_img_save_dir: Path, config):
+  valid_samples = []
+
+  # 先清空之前存下来的
+  if mol_img_save_dir.exists() and mol_img_save_dir.is_dir():
+    shutil.rmtree(mol_img_save_dir)
+  # 重新创建一个空文件夹
+  os.makedirs(mol_img_save_dir, exist_ok=True)
+
+  # 肽键 pattern
+  amide_smarts = "[NX3][CX3](=O)[#6]"
+  amide_pattern = Chem.MolFromSmarts(amide_smarts)
+
+  fig_count = 0
+  non_pep_count = 0
+
+  for i, sample in enumerate(samples):
+    if '[CLS]' in sample:
+      continue
+
+    if '[Nop]' in sample:
+      continue
+
+    if '[UNK]' in sample:
+      continue
+
+    try:
+      SMILES_str = sf.decoder(sample)
+    except Exception:
+      continue
+    mol = Chem.MolFromSmiles(SMILES_str)
+
+    if mol is None:
+      # record and skip
+      continue
+
+    # 检查有没有肽键, 没有的直接跳过：
+    if config.sampling.peptide_only:
+      if not mol.HasSubstructMatch(amide_pattern):
+        non_pep_count += 1
+        continue
+
+    try:
+      img = Draw.MolToImage(mol, size=(1500, 1000))
+    except ValueError as e:
+      print(f"Warning: failed drawing molecule #{i}: {e!r}")
+      continue
+
+    # img = Draw.MolToImage(mol, size=(1500, 1000))
+
+    img.save(mol_img_save_dir/f"mol_{fig_count}.png")
+    fig_count += 1
+    valid_samples.append(sample)
+  print(f' Generated mol figs saved to {str(mol_img_save_dir)}')
+  print(f' non peptide count: {non_pep_count}')
+
+  return valid_samples
+
+def extract_valid_SELFIES(samples, tokenizer):
+  valid_SELFIES_token_ids = []
+  for sample in samples:
+    idxs = torch.where(sample == tokenizer.sep_token_id)[0]  # 找到停止的地方
+    first_idx = idxs[0].item() if idxs.numel() > 0 else None
+    if first_idx is not None and sample[0] == tokenizer.cls_token_id:
+      if tokenizer.mask_token_id in sample[1:first_idx] or tokenizer.pad_token_id in sample[1:first_idx]:
+        continue
+      valid_SELFIES_token_ids.append(sample[1:first_idx])
+    else:
+      print(f' invalid SELFIES: {sample}')
+
+  print(f' len valid SELFIES: {len(valid_SELFIES_token_ids)}\n len all SELFIES: {len(samples)}')
+  return valid_SELFIES_token_ids
+
+def save_sampled_mols_SEFLIES(samples, config):
+  guidance_method = "noise" if config.guidance.noise else "clean"
+  if config.classifier_backbone != 'dit_synergy_cls_AMP':
+    save_path = Path(config.sampling.mol_SELFIES_save_dir)/f"strain_{config.sampling.strain}_MIC_{config.sampling.target_MIC}_length_{config.sampling.target_length}_{guidance_method}.txt"
+  else:
+    if config.guidance.method == 'cbg_antibiotic':
+      save_path = Path(config.sampling.mol_SELFIES_save_dir) / f"strain_{config.sampling.strain}_synoguide_{config.sampling.synergy_mol_name}_length_{config.sampling.target_length}_{guidance_method}.txt"
+    else:
+      save_path = Path(config.sampling.mol_SELFIES_save_dir) / f"strain_{config.sampling.strain}_syn_{config.sampling.synergy_mol_name}_length_{config.sampling.target_length}_{guidance_method}.txt"
+
+  with open(save_path, 'w') as f:
+    for line in samples:
+      # 写入字符串，并在末尾加上换行符
+      f.write(line + "\n")
+
+
+  print(f' Generated mol selfies saved to {str(save_path)}')

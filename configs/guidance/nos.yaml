@@ -1,4 +1,4 @@
-method: nos
+method: nos  # nos / nos_antibiotic
 condition: 0
 classifier_checkpoint_path: ''
 num_nos_steps: 1
