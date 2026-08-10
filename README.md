@@ -1,5 +1,9 @@
 # Simple Guidance Mechanisms for Discrete Diffusion Models
 
+> ApexOracle release note: this fork also contains a separately scoped portable MIC+peptide generation preset.
+> Use `scripts/reproduce/run_paper_mic_peptide.py` with explicit ApexOracle-MDLM/Core roots and a new output
+> directory; see `docs/PAPER_MIC_PEPTIDE_CONFIG.md`. Experimental synergy generation is not part of that preset.
+
 [![arXiv](https://img.shields.io/badge/arXiv-2412.10193-red.svg)](https://arxiv.org/abs/2412.10193)
 [![deploy](https://img.shields.io/badge/Blog%20%20-8A2BE2)](https://discrete-diffusion-guidance.github.io/)
 [![deploy](https://img.shields.io/badge/Huggingface%20-UDLM%20-blue)](https://huggingface.co/collections/kuleshov-group/udlm-675e63ab42bc757093099e1b)

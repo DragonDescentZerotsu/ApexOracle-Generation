@@ -42,12 +42,18 @@ PYTHONPATH=/path/to/ApexOracle-MDLM/src \
   python -m pytest -q tests/test_apexoracle_mdlm_integration.py
 ```
 
-### G2：论文入口和 portable config——待完成
+### G2：论文入口和 portable config——完成
 
-- 从历史 resolved config 提取 paper-compatible preset，不直接把当前可变根配置称为论文终版；
-- 将 checkpoint、embedding 和输出目录改为显式 CLI/config 参数或 super-repo asset resolver；
-- 把论文 MIC+peptide 主路径与后续 synergy generation 分开标记；
-- 新建只写全新目录的最小公开 smoke，禁止覆盖历史 `outputs/`。
+- [x] 从历史 resolved config 提取 `configs/paper/mic_peptide.yaml`，不改写或冒充当前可变根配置；
+- [x] `run_paper_mic_peptide.py` 从显式 Generation/MDLM/Core roots 解析 checkpoint/embedding，并拒绝复用
+  已存在 output directory；所有图片、SELFIES、Hydra/manifest 输出限制在新 run directory；
+- [x] preset 固定论文 MIC+peptide 主路径，synergy generation 继续是独立 experimental config；
+- [x] Hydra dry-run 无 `/share/kuleshov`、`/data1` 或隐式历史 output path；9 项 focused tests 通过；
+- [x] GPU 1 完成 1-sample、256-step portable smoke，exit code 0。token-level complete 为 1，结构过滤后
+  0-row/0-image；只验证 runtime/output contract，不作为 candidate yield 证据。
+
+协议、资产 hash、输出安全与 smoke hashes 见 `docs/PAPER_MIC_PEPTIDE_CONFIG.md` 和
+`reproducibility/paper_mic_peptide_protocol.json`。
 
 ### G3：clean module release——待完成
 

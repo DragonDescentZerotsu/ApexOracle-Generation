@@ -36,6 +36,14 @@
   deterministic mode 又被 CUDA `cumsum` 明确拒绝，因此 final token byte equality 不是合法 gate。精确 hash、
   命令边界和解释见 `docs/MDLM_INTEGRATION.md` 与
   `reproducibility/full_sampler_mdlm_parity.json`。
+- **2026-08-10 paper portable config：** canonical preset 为 `configs/paper/mic_peptide.yaml`；公开 launcher
+  `scripts/reproduce/run_paper_mic_peptide.py` 必须显式接收 `--mdlm-root`、`--core-root` 和尚不存在的
+  `--output-dir`，并可用 `--dry-run` 或 `--smoke`。它固定论文 256-step、15/15 guidance 与 remasking schedule，
+  不启用 experimental synergy。GPU 1 的 1-sample smoke exit code 0，token-level complete 1 条、结构过滤后
+  0-row/0-image；只能解释为 runtime/output contract 通过，不能解释为 candidate yield。验证命令：
+  `PYTHONPATH=/path/to/ApexOracle-MDLM/src python -m pytest -q
+  tests/test_apexoracle_mdlm_integration.py tests/test_paper_mic_peptide_config.py`。完整边界见
+  `docs/PAPER_MIC_PEPTIDE_CONFIG.md` 与 `reproducibility/paper_mic_peptide_protocol.json`。
 
 ### 操作约束
 

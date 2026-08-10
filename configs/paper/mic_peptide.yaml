@@ -1,0 +1,87 @@
+# @package _global_
+
+# Portable ApexOracle paper preset. Paths are resolved only from explicit
+# environment variables set by scripts/reproduce/run_paper_mic_peptide.py.
+apexoracle_release:
+  protocol: paper_mic_peptide_guided_v1
+  historical_resolved_config: outputs/qm9/2025.06.11/235615/.hydra/config.yaml
+  historical_resolved_config_sha256: d292b32c0b3674cd1a60d61802b228b5bfde3aef3e9a18dcdf0c32fa94917d45
+  scope: paper_mic_peptide_guidance
+
+mode: guide_sample
+classifier_backbone: dit_reg_cls_AMP
+seed: 2
+
+loader:
+  global_batch_size: 50
+  eval_global_batch_size: ${.global_batch_size}
+
+# These upstream training fields are not consumed by guide_sample, but keeping
+# them portable prevents a public resolved config from pointing at upstream
+# cluster storage or this source checkout.
+data:
+  cache_dir: ${oc.env:APEXORACLE_GENERATION_RUN_DIR}/unused_upstream_data_cache
+
+checkpointing:
+  save_dir: ${oc.env:APEXORACLE_GENERATION_RUN_DIR}
+  resume_ckpt_path: ${.save_dir}/checkpoints/last.ckpt
+
+callbacks:
+  checkpoint_every_n_steps:
+    dirpath: ${oc.env:APEXORACLE_GENERATION_RUN_DIR}/checkpoints
+  checkpoint_monitor:
+    dirpath: ${oc.env:APEXORACLE_GENERATION_RUN_DIR}/checkpoints
+
+sampling:
+  use_cache: false
+  steps: 256
+  batch_size: ${loader.eval_batch_size}
+  num_sample_batches: 10
+  use_float64: false
+  pretrained_ckpt_path: ${oc.env:APEXORACLE_MDLM_ROOT}/Checkpoints_fangping/last_reg_v1.ckpt
+  pretrain_backbone_config: ${oc.env:APEXORACLE_GENERATION_ROOT}/configs/config_mdlm_cls.yaml
+  genome_test_emb_dir_path:
+    ATCC_genome_emb: ${oc.env:APEXORACLE_CORE_ROOT}/DataPrepare/Data/Genome_embs
+    ATCC_text_emb: ${oc.env:APEXORACLE_CORE_ROOT}/DataPrepare/Data/Text_Description/ATCC/embeddings
+    only_text_emb: ${oc.env:APEXORACLE_CORE_ROOT}/DataPrepare/Data/Text_Description/wo_ATCC/embeddings
+  strain: BAA-3170
+  target_MIC: 1
+  target_MIC_max: 1
+  target_length: 368
+  gaussian_sigma_min: 0.2
+  gaussian_sigma_max: 0.5
+  peptide_only: true
+  nucleus_p: 0.9
+  remdm:
+    eta: 0.02
+    t_on: 0.55
+    t_off: 0.45
+    alpha_on: 0.5
+  mol_img_save_dir: ${oc.env:APEXORACLE_GENERATION_RUN_DIR}/molecule_images
+  mol_SELFIES_save_dir: ${oc.env:APEXORACLE_GENERATION_RUN_DIR}
+  syn_mol_img_save_dir: ${oc.env:APEXORACLE_GENERATION_RUN_DIR}/synergy_molecule_images
+  syn_mol_img_save_dir_no_guide: ${oc.env:APEXORACLE_GENERATION_RUN_DIR}/synergy_no_guidance_molecule_images
+  synergy_mol_emb_dict_path: ${oc.env:APEXORACLE_CORE_ROOT}/DataPrepare/Data/synergy_mol_emb_dict_cls_wo_pad.pt
+
+guidance:
+  method: cbg_antibiotic_remdm_loop
+  condition: 0
+  # Historical configs use the truthy string ``Ture``; preserve it here rather
+  # than silently changing the resolved protocol during the release refactor.
+  noise: Ture
+  regressor_checkpoint_path: ${oc.env:APEXORACLE_CORE_ROOT}/Checkpoints/genome_text_learnable_emb/guidance_regressor_pad_no_mask/noise_guidance_best_R2_all_peptide_epoch_100.pth
+  classifier_checkpoint_path: ${oc.env:APEXORACLE_MDLM_ROOT}/cls-guide-pad-no-mask-checkpoints/epoch-epoch=1-step-step=134000-train_loss-train_loss=0.008.ckpt
+  gamma: 1.0
+  var_gamma:
+    gamma_l: 15.0
+    gamma_s: 15.0
+  cls_guide_weight: 0.0
+  reg_guide_weight: 1.0
+  use_approx: true
+  var_length: false
+
+hydra:
+  run:
+    dir: ${oc.env:APEXORACLE_GENERATION_RUN_DIR}
+  job:
+    chdir: true

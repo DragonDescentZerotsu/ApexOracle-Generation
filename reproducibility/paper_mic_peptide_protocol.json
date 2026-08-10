@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "date": "2026-08-10",
+  "status": "portable_preset_and_gpu_smoke_validated",
+  "preset": "configs/paper/mic_peptide.yaml",
+  "launcher": "scripts/reproduce/run_paper_mic_peptide.py",
+  "historical_resolved_config": {
+    "relative_path": "outputs/qm9/2025.06.11/235615/.hydra/config.yaml",
+    "sha256": "d292b32c0b3674cd1a60d61802b228b5bfde3aef3e9a18dcdf0c32fa94917d45"
+  },
+  "protocol": {
+    "mode": "guide_sample",
+    "classifier_backbone": "dit_reg_cls_AMP",
+    "seed": 2,
+    "strain": "BAA-3170",
+    "target_length": 368,
+    "target_mic_uM": 1,
+    "steps": 256,
+    "paper_global_batch_size": 50,
+    "paper_num_sample_batches": 10,
+    "gaussian_sigma_min": 0.2,
+    "gaussian_sigma_max": 0.5,
+    "remasking_eta": 0.02,
+    "t_on": 0.55,
+    "t_off": 0.45,
+    "alpha_on": 0.5,
+    "gamma_mic": 15.0,
+    "gamma_peptide": 15.0
+  },
+  "portable_roots": [
+    "APEXORACLE_GENERATION_ROOT",
+    "APEXORACLE_MDLM_ROOT",
+    "APEXORACLE_CORE_ROOT",
+    "APEXORACLE_GENERATION_RUN_DIR"
+  ],
+  "asset_sha256": {
+    "dlm_generator": "a509b94e3780a0848b3f799ccfe754ed07524169973b08d85fdbc597f0592615",
+    "noisy_mic_guidance": "f24faf670b804edebbd4d6530a42c1351b62040046e14ebded67335aefc9c3a4",
+    "noisy_peptide_classifier": "40f638ca5668f20a641a538035015b1741ab69cded300cba27f7148cc291945b"
+  },
+  "condition_embedding_file_counts": {
+    "genome": 567,
+    "atcc_text": 568,
+    "text_only": 1079
+  },
+  "output_safety": {
+    "requires_absent_output_directory": true,
+    "historical_outputs_are_never_selected_by_default": true,
+    "molecule_images_are_scoped_below_the_new_run_directory": true,
+    "selfies_and_run_manifest_are_scoped_to_the_new_run_directory": true,
+    "unused_upstream_data_cache_and_training_callback_paths_are_scoped_to_the_new_run_directory": true
+  },
+  "scope_boundary": "This preset is the paper MIC+peptide path. Experimental synergy generation remains a separate explicitly selected config and is not part of this protocol.",
+  "sampler_validation": "reproducibility/full_sampler_mdlm_parity.json",
+  "portable_smoke": {
+    "ignored_output_directory": "outputs/release_smoke_20260810_portable",
+    "device": "physical GPU 1 exposed as one visible CUDA device",
+    "mode": "--smoke: global batch size 1, one batch; paper 256-step schedule unchanged",
+    "exit_code": 0,
+    "hydra_config_sha256": "27c5d4fd46f8bf01b4fa212c3804a5fad4f38033c2635225e584d93756d2ad55",
+    "run_manifest_sha256_before_output_summary_extension": "735b182f389af287727ef566584063ab0ee4b8d0681f81d72cd4dc21e2f8ed53",
+    "token_level_complete_selfies_before_structure_filter": 1,
+    "written_selfies_rows_after_rdkit_and_peptide_filter": 0,
+    "molecule_image_count": 0,
+    "written_selfies_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "interpretation": "The portable entry, formal asset loading, full 256-step sampler and isolated output contract completed. This one-sample smoke does not establish candidate yield or activity."
+  }
+}
