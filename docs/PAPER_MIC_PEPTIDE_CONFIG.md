@@ -12,6 +12,12 @@ python scripts/reproduce/run_paper_mic_peptide.py \
   --device 0
 ```
 
+公开 compact BAA-3170 smoke 资产固定在 Hugging Face
+`Kiria-Nozan/ApexOracle-Generation` revision
+`2fb1aa08187eaa359263be6c12c8a41868d8959c`。下载后在同一命令增加
+`--asset-root /path/to/downloaded-assets --smoke --check-asset-hashes`；完整论文运行不加 `--asset-root`，
+继续检查全部 condition banks。
+
 `--output-dir` 必须尚不存在。launcher 不接受历史 `outputs/` 作为隐式默认值，并将图片、SELFIES、Hydra
 resolved config 和 `apexoracle_generation_run_manifest.json` 都限制在该新目录内。只做配置解析时加
 `--dry-run`；最小 GPU smoke 加 `--smoke`，后者只将 global batch 和 batch count 改为 `1/1`，不改变 256-step
@@ -34,6 +40,10 @@ sampler、guidance strength 或 remasking schedule。
   token-level complete SELFIES 完成 256 steps，进程 exit code 为 0。该随机样本未通过后续 RDKit/peptide
   filter，因此 canonical 文本为 0 rows、图片为 0；这验证 runtime/output contract，不验证 candidate yield、
   chemical validity rate 或 activity。
+- inference-only 三 checkpoint 与单一 BAA-3170 genome/text bundle 合计 4,059,311,443 bytes；相对历史
+  三 checkpoint 11,129,271,105 bytes 删除 optimizer/training-loop/callback 与未使用 MIC cls head。compact
+  bundle 已通过全部 SHA-256、resolved-config dry-run 和真实 H100 256-step smoke（exit 0、1 complete
+  SELFIES）；这验证裁剪后 runtime 等价边界，不增加 deterministic 或 activity 声明。
 
 ## 发布边界
 

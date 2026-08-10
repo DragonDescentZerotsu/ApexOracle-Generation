@@ -55,6 +55,12 @@
   `https://github.com/DragonDescentZerotsu/ApexOracle-Generation.git` 已创建，默认分支为 `main`；G3 code commit
   `3a68dd0` 与 annotated recovery tag 已推送。fresh clone 的 release audit、全仓 14 tests 和双 strain
   resolved-config dry-run 均通过。`origin` 继续指向 `kuleshov-group`，严禁向其推送 ApexOracle commits。
+- **2026-08-10 compact public generation assets：** Hugging Face
+  `Kiria-Nozan/ApexOracle-Generation` revision `2fb1aa08187eaa359263be6c12c8a41868d8959c` 固定 inference-only
+  DLM/noisy-MIC/noisy-peptide checkpoints 与 BAA-3170 genome/text；合计 4,059,311,443 bytes。canonical launcher
+  新增 `--asset-root`，只允许该 compact bundle 用于 BAA-3170；完整 paper profile 保持全 condition banks。
+  11 focused tests、全部资产 SHA-256、resolved dry-run 和真实 H100 256-step smoke 均通过，得到 1 complete
+  SELFIES、exit 0；不得解释为 deterministic generation、candidate yield 或实验 activity。
 
 ### 操作约束
 

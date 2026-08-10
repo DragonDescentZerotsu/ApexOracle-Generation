@@ -4,6 +4,8 @@
 > Use `scripts/reproduce/run_paper_mic_peptide.py` with explicit ApexOracle-MDLM/Core roots and a new output
 > directory; see `docs/PAPER_MIC_PEPTIDE_CONFIG.md`. Manifest-defined multi-strain scans use
 > `scripts/reproduce/run_mic_peptide_grid.py`. Experimental extensions are not part of the frozen paper preset.
+> Public inference-only BAA-3170 smoke assets are pinned at
+> [Kiria-Nozan/ApexOracle-Generation](https://huggingface.co/Kiria-Nozan/ApexOracle-Generation/tree/2fb1aa08187eaa359263be6c12c8a41868d8959c).
 
 [![arXiv](https://img.shields.io/badge/arXiv-2412.10193-red.svg)](https://arxiv.org/abs/2412.10193)
 [![deploy](https://img.shields.io/badge/Blog%20%20-8A2BE2)](https://discrete-diffusion-guidance.github.io/)

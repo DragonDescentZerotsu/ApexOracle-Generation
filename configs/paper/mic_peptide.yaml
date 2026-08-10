@@ -38,12 +38,12 @@ sampling:
   batch_size: ${loader.eval_batch_size}
   num_sample_batches: 10
   use_float64: false
-  pretrained_ckpt_path: ${oc.env:APEXORACLE_MDLM_ROOT}/Checkpoints_fangping/last_reg_v1.ckpt
+  pretrained_ckpt_path: ${oc.env:APEXORACLE_DLM_GENERATOR_CHECKPOINT}
   pretrain_backbone_config: ${oc.env:APEXORACLE_GENERATION_ROOT}/configs/config_mdlm_cls.yaml
   genome_test_emb_dir_path:
-    ATCC_genome_emb: ${oc.env:APEXORACLE_CORE_ROOT}/DataPrepare/Data/Genome_embs
-    ATCC_text_emb: ${oc.env:APEXORACLE_CORE_ROOT}/DataPrepare/Data/Text_Description/ATCC/embeddings
-    only_text_emb: ${oc.env:APEXORACLE_CORE_ROOT}/DataPrepare/Data/Text_Description/wo_ATCC/embeddings
+    ATCC_genome_emb: ${oc.env:APEXORACLE_GENOME_EMBEDDINGS}
+    ATCC_text_emb: ${oc.env:APEXORACLE_ATCC_TEXT_EMBEDDINGS}
+    only_text_emb: ${oc.env:APEXORACLE_TEXT_ONLY_EMBEDDINGS}
   strain: BAA-3170
   target_MIC: 1
   target_MIC_max: 1
@@ -69,8 +69,8 @@ guidance:
   # Historical configs use the truthy string ``Ture``; preserve it here rather
   # than silently changing the resolved protocol during the release refactor.
   noise: Ture
-  regressor_checkpoint_path: ${oc.env:APEXORACLE_CORE_ROOT}/Checkpoints/genome_text_learnable_emb/guidance_regressor_pad_no_mask/noise_guidance_best_R2_all_peptide_epoch_100.pth
-  classifier_checkpoint_path: ${oc.env:APEXORACLE_MDLM_ROOT}/cls-guide-pad-no-mask-checkpoints/epoch-epoch=1-step-step=134000-train_loss-train_loss=0.008.ckpt
+  regressor_checkpoint_path: ${oc.env:APEXORACLE_MIC_GUIDANCE_CHECKPOINT}
+  classifier_checkpoint_path: ${oc.env:APEXORACLE_PEPTIDE_GUIDANCE_CHECKPOINT}
   gamma: 1.0
   var_gamma:
     gamma_l: 15.0

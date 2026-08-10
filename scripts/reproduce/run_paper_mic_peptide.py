@@ -33,6 +33,21 @@ ASSETS = {
     ),
 }
 
+COMPACT_ASSETS = {
+    "dlm_generator": (
+        "checkpoints/dlm_generator_inference.ckpt",
+        "2603e875fd1882f45abab52105c275cb94e2f2aa84c7f35beb318c1a8ab80d4a",
+    ),
+    "noisy_mic_guidance": (
+        "checkpoints/noisy_mic_guidance_inference.pth",
+        "734079f8b5b2d60146a38aa1c34271f5ba712c2d24515b8a2c25b6ecf7db492e",
+    ),
+    "noisy_peptide_classifier": (
+        "checkpoints/noisy_peptide_classifier_inference.ckpt",
+        "632091509bbcda82384ffef5cd59ffbef3c38716df319c59db2167cddb7ab7ca",
+    ),
+}
+
 CONDITION_DIRECTORIES = (
     ("genome_embeddings", "DataPrepare/Data/Genome_embs", 567),
     (
@@ -55,6 +70,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mdlm-root", type=Path, required=True)
     parser.add_argument("--core-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--asset-root",
+        type=Path,
+        help="Use the released compact checkpoint and BAA-3170 condition bundle.",
+    )
     parser.add_argument("--strain", default="BAA-3170")
     parser.add_argument("--target-length", type=int)
     parser.add_argument("--device", type=int, default=0)
@@ -92,6 +112,7 @@ def validate_roots_and_assets(
     core_root: Path,
     *,
     check_hashes: bool,
+    asset_root: Path | None = None,
 ) -> list[dict[str, Any]]:
     roots = {"generation": generation_root, "mdlm": mdlm_root, "core": core_root}
     required_paths = (
@@ -104,8 +125,14 @@ def validate_roots_and_assets(
         if not path.exists():
             raise FileNotFoundError(path)
     records: list[dict[str, Any]] = []
-    for asset_id, relative, expected_count in CONDITION_DIRECTORIES:
-        path = core_root / relative
+    compact_conditions = (
+        ("genome_embeddings", "conditions/genome", 1),
+        ("atcc_text_embeddings", "conditions/atcc_text", 1),
+        ("text_only_embeddings", "conditions/text_only", 0),
+    )
+    condition_records = compact_conditions if asset_root else CONDITION_DIRECTORIES
+    for asset_id, relative, expected_count in condition_records:
+        path = (asset_root / relative) if asset_root else (core_root / relative)
         if not path.is_dir():
             raise NotADirectoryError(path)
         actual_count = sum(child.is_file() for child in path.iterdir())
@@ -116,15 +143,22 @@ def validate_roots_and_assets(
         records.append(
             {
                 "id": asset_id,
-                "owner": "core",
+                "owner": "compact_asset_bundle" if asset_root else "core",
                 "relative_path": relative,
                 "file_count": actual_count,
                 "expected_file_count": expected_count,
             }
         )
 
-    for asset_id, (owner, relative, expected_hash) in ASSETS.items():
-        path = roots[owner] / relative
+    asset_records = COMPACT_ASSETS if asset_root else ASSETS
+    for asset_id, spec in asset_records.items():
+        if asset_root:
+            relative, expected_hash = spec
+            owner = "compact_asset_bundle"
+            path = asset_root / relative
+        else:
+            owner, relative, expected_hash = spec
+            path = roots[owner] / relative
         if not path.is_file():
             raise FileNotFoundError(path)
         record: dict[str, Any] = {
@@ -224,6 +258,7 @@ def main() -> None:
     generation_root = Path(__file__).resolve().parents[2]
     mdlm_root = args.mdlm_root.expanduser().resolve()
     core_root = args.core_root.expanduser().resolve()
+    asset_root = args.asset_root.expanduser().resolve() if args.asset_root else None
     output_dir = validate_new_output_directory(args.output_dir)
     if args.target_length is None:
         if args.strain not in STRAIN_LENGTHS:
@@ -251,7 +286,29 @@ def main() -> None:
         mdlm_root,
         core_root,
         check_hashes=args.check_asset_hashes,
+        asset_root=asset_root,
     )
+
+    if asset_root:
+        if args.strain != "BAA-3170":
+            raise ValueError("The released compact asset bundle supports only BAA-3170")
+        runtime_assets = {
+            "dlm": asset_root / COMPACT_ASSETS["dlm_generator"][0],
+            "mic": asset_root / COMPACT_ASSETS["noisy_mic_guidance"][0],
+            "peptide": asset_root / COMPACT_ASSETS["noisy_peptide_classifier"][0],
+            "genome": asset_root / "conditions/genome",
+            "atcc_text": asset_root / "conditions/atcc_text",
+            "text_only": asset_root / "conditions/text_only",
+        }
+    else:
+        runtime_assets = {
+            "dlm": mdlm_root / ASSETS["dlm_generator"][1],
+            "mic": core_root / ASSETS["noisy_mic_guidance"][1],
+            "peptide": mdlm_root / ASSETS["noisy_peptide_classifier"][1],
+            "genome": core_root / CONDITION_DIRECTORIES[0][1],
+            "atcc_text": core_root / CONDITION_DIRECTORIES[1][1],
+            "text_only": core_root / CONDITION_DIRECTORIES[2][1],
+        }
 
     environment = os.environ.copy()
     environment.update(
@@ -260,6 +317,12 @@ def main() -> None:
             "APEXORACLE_MDLM_ROOT": str(mdlm_root),
             "APEXORACLE_CORE_ROOT": str(core_root),
             "APEXORACLE_GENERATION_RUN_DIR": str(output_dir),
+            "APEXORACLE_DLM_GENERATOR_CHECKPOINT": str(runtime_assets["dlm"]),
+            "APEXORACLE_MIC_GUIDANCE_CHECKPOINT": str(runtime_assets["mic"]),
+            "APEXORACLE_PEPTIDE_GUIDANCE_CHECKPOINT": str(runtime_assets["peptide"]),
+            "APEXORACLE_GENOME_EMBEDDINGS": str(runtime_assets["genome"]),
+            "APEXORACLE_ATCC_TEXT_EMBEDDINGS": str(runtime_assets["atcc_text"]),
+            "APEXORACLE_TEXT_ONLY_EMBEDDINGS": str(runtime_assets["text_only"]),
             "CUDA_VISIBLE_DEVICES": str(args.device),
         }
     )
@@ -291,6 +354,7 @@ def main() -> None:
         "output_dir": str(output_dir),
         "command": command,
         "assets": assets,
+        "asset_profile": "compact_baa3170_v1" if asset_root else "full_paper_assets",
     }
     print(json.dumps(launch, indent=2, sort_keys=True))
     result = subprocess.run(command, cwd=generation_root, env=environment, check=False)

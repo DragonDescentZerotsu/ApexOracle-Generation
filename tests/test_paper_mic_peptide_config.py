@@ -55,6 +55,38 @@ def test_paper_preset_uses_only_explicit_roots() -> None:
     assert "/data1/" not in source
     assert "/data2/" not in source
     assert "/Users/" not in source
+    assert config["sampling"]["pretrained_ckpt_path"] == (
+        "${oc.env:APEXORACLE_DLM_GENERATOR_CHECKPOINT}"
+    )
+    assert config["guidance"]["regressor_checkpoint_path"] == (
+        "${oc.env:APEXORACLE_MIC_GUIDANCE_CHECKPOINT}"
+    )
+
+
+def test_compact_asset_bundle_contract(tmp_path: Path) -> None:
+    launcher = load_launcher()
+    mdlm_root = tmp_path / "mdlm"
+    (mdlm_root / "src/apexoracle_mdlm").mkdir(parents=True)
+    for relative, _ in launcher.COMPACT_ASSETS.values():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"asset")
+    for relative in ("conditions/genome", "conditions/atcc_text"):
+        path = tmp_path / relative
+        path.mkdir(parents=True)
+        (path / "Escherichia_coli_ATCC_BAA_3170.pt").write_bytes(b"tensor")
+    (tmp_path / "conditions/text_only").mkdir(parents=True)
+
+    records = launcher.validate_roots_and_assets(
+        ROOT,
+        mdlm_root,
+        Path("/unused-core"),
+        check_hashes=False,
+        asset_root=tmp_path,
+    )
+
+    assert len(records) == 6
+    assert {record["owner"] for record in records} == {"compact_asset_bundle"}
 
 
 def test_launcher_requires_a_new_output_directory(tmp_path: Path) -> None:
