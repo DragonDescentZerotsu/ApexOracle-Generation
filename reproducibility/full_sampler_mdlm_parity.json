@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "date": "2026-08-10",
+  "legacy_ref": "legacy-code-snapshot-2026-08-10",
+  "canonical_mdlm_commit": "b9ac2915eb109f4a9c5f2faac570ef1796d3f7de",
+  "protocol": {
+    "strain": "BAA-3170",
+    "target_length": 368,
+    "batch_size": 2,
+    "steps": 256,
+    "seed": 20260810,
+    "target_mic_uM": 1.0,
+    "t_on": 0.55,
+    "t_off": 0.45,
+    "remasking_eta": 0.02,
+    "alpha_on": 0.5,
+    "gamma_mic": 15.0,
+    "gamma_peptide": 15.0
+  },
+  "fixed_input_guidance": {
+    "shape": [2, 64],
+    "legacy_output_sha256": "72766f647e6495952edddcd75efecb81ebdca98ba35518f1e1fae514f72d316e",
+    "canonical_output_sha256": "72766f647e6495952edddcd75efecb81ebdca98ba35518f1e1fae514f72d316e",
+    "legacy_input_gradient_sha256": "857abdf783f4d4d7eb308d30aa353267b615df445c98fe004128c5e96439619a",
+    "canonical_input_gradient_sha256": "857abdf783f4d4d7eb308d30aa353267b615df445c98fe004128c5e96439619a",
+    "torch_equal": true,
+    "embedding_key_counts": {"genome": 567, "atcc_text": 568, "text_only": 1079}
+  },
+  "full_sampler_runs": [
+    {
+      "name": "legacy",
+      "resolved_config_sha256": "864a7513976852077626dcd4f320f0d5dbef522377c6515071478e190aebb080",
+      "batch_sha256": "af6837cc86099b1df2d55581cd18dfd7477b3951797f490dd54385bfcd2af1e6",
+      "rows": 2,
+      "complete": 2,
+      "rdkit_valid": 1
+    },
+    {
+      "name": "legacy_repeat",
+      "resolved_config_note": "Scientific values are identical; only the temporary producer-root path differs.",
+      "batch_sha256": "c52e5ad7a8be60b35fb0d2a1c51be4359b841f15831466bfbeec8b35e95df63b",
+      "rows": 2,
+      "complete": 2,
+      "rdkit_valid": 1
+    },
+    {
+      "name": "canonical",
+      "resolved_config_sha256": "864a7513976852077626dcd4f320f0d5dbef522377c6515071478e190aebb080",
+      "batch_sha256": "af272b6f6d2d2de63f5e8ae3efcdee1401d73d1028984bb541215bb3331e2767",
+      "rows": 2,
+      "complete": 2,
+      "rdkit_valid": 1
+    },
+    {
+      "name": "canonical_no_copy_final_active_tree",
+      "resolved_config_sha256": "864a7513976852077626dcd4f320f0d5dbef522377c6515071478e190aebb080",
+      "batch_sha256": "4ed023ff4786e778cf988f4081d1ae6c7a31a34a35357bcaa6e17f4b2e98d13a",
+      "rows": 2,
+      "complete": 2,
+      "rdkit_valid": 1,
+      "legacy_duplicate_present": false
+    }
+  ],
+  "determinism_probe": {
+    "requested": true,
+    "completed": false,
+    "failure": "RuntimeError: cumsum_cuda_kernel does not have a deterministic implementation",
+    "location": "first sampler step during CUDA nucleus-filter cumulative probability"
+  },
+  "conclusion": {
+    "verified": "Canonical MDLM components preserve fixed-input guidance forward and token-gradient tensors exactly, and the canonical dependency completes the paper-parameter 256-step sampler with the frozen output contract.",
+    "limitation": "The historical sampler is not bitwise repeatable with the same seed on this CUDA stack, so final sampled token equality is not a valid migration gate."
+  }
+}

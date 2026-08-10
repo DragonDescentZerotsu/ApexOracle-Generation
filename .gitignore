@@ -5,3 +5,5 @@ __pycache__/
 .hf_cache
 outputs/
 watch_folder/
+cache_data/
+papers/

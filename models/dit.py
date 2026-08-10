@@ -10,8 +10,9 @@ import omegaconf
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from apexoracle_mdlm.embeddings import load_atcc_embeddings, load_text_embeddings
+from apexoracle_mdlm.models import FirstTokenCrossAttention, RegressionHead
 from einops import rearrange
-from . import antibiotic_classifier
 import numpy as np
 from pathlib import Path
 from torch.distributions import Normal
@@ -737,15 +738,15 @@ class DITClassifier_AMP(nn.Module):
                   use_adaLN=use_adaLN))
     self.blocks = nn.ModuleList(blocks)
 
-    self.co_cross_attn_genome = antibiotic_classifier.FirstTokenAttention_genome(config.classifier_model.hidden_size,
+    self.co_cross_attn_genome = FirstTokenCrossAttention(config.classifier_model.hidden_size,
                                                                                  8192,
                                                                                  4,
                                                                                  0.1)
-    self.co_cross_attn_text = antibiotic_classifier.FirstTokenAttention_genome(config.classifier_model.hidden_size,
+    self.co_cross_attn_text = FirstTokenCrossAttention(config.classifier_model.hidden_size,
                                                                                4096,
                                                                                4,
                                                                                0.1)
-    self.reg_head = antibiotic_classifier.RegressionHead(8192+4096, (8192+4096)//4, 128, 1, 0.2)
+    self.reg_head = RegressionHead(8192+4096, (8192+4096)//4, 128, 1, 0.2)
     self.learnable_embedding_weight = nn.Parameter(torch.randn(1, 8192))
 
     self.scale_by_sigma = config.classifier_model.scale_by_sigma
@@ -778,18 +779,18 @@ class DITClassifier_AMP(nn.Module):
 
 
   def load_genome_test_embedding(self):
-    ATCC_genome_emb_dict = antibiotic_classifier.load_all_genome_embeddings(Path(self.config.sampling.genome_test_emb_dir_path.ATCC_genome_emb),
-                                                                            1e14,
-                                                                            'cpu',
-                                                                            'ATCC genome embedding')
-    ATCC_text_emb_dict = antibiotic_classifier.load_all_genome_embeddings(Path(self.config.sampling.genome_test_emb_dir_path.ATCC_text_emb),
-                                                                            1,
-                                                                            'cpu',
-                                                                            'ATCC text embedding')
-    text_only_emb_dict = antibiotic_classifier.load_text_wo_genome_embeddings(Path(self.config.sampling.genome_test_emb_dir_path.only_text_emb),
-                                                                            1,
-                                                                            'cpu',
-                                                                            'text only embedding')
+    ATCC_genome_emb_dict = load_atcc_embeddings(
+      Path(self.config.sampling.genome_test_emb_dir_path.ATCC_genome_emb),
+      scale=1e14,
+      device='cpu')
+    ATCC_text_emb_dict = load_atcc_embeddings(
+      Path(self.config.sampling.genome_test_emb_dir_path.ATCC_text_emb),
+      scale=1,
+      device='cpu')
+    text_only_emb_dict = load_text_embeddings(
+      Path(self.config.sampling.genome_test_emb_dir_path.only_text_emb),
+      scale=1,
+      device='cpu')
     strain_cond = str(self.config.sampling.strain)
     return ATCC_genome_emb_dict, ATCC_text_emb_dict, text_only_emb_dict, strain_cond
 
@@ -951,15 +952,15 @@ class DIT_Reg_Cls_AMP(nn.Module):
                   use_adaLN=use_adaLN))
     self.blocks_cls = nn.ModuleList(blocks_cls)
 
-    self.co_cross_attn_genome = antibiotic_classifier.FirstTokenAttention_genome(config.classifier_model.hidden_size,
+    self.co_cross_attn_genome = FirstTokenCrossAttention(config.classifier_model.hidden_size,
                                                                                  8192,
                                                                                  4,
                                                                                  0.1)
-    self.co_cross_attn_text = antibiotic_classifier.FirstTokenAttention_genome(config.classifier_model.hidden_size,
+    self.co_cross_attn_text = FirstTokenCrossAttention(config.classifier_model.hidden_size,
                                                                                4096,
                                                                                4,
                                                                                0.1)
-    self.reg_head = antibiotic_classifier.RegressionHead(8192+4096, (8192+4096)//4, 128, 1, 0.2)
+    self.reg_head = RegressionHead(8192+4096, (8192+4096)//4, 128, 1, 0.2)
     self.learnable_embedding_weight = nn.Parameter(torch.randn(1, 8192))
 
     self.ClsHead = ClsHead(input_dim=768, num_targets=1)
@@ -1027,18 +1028,18 @@ class DIT_Reg_Cls_AMP(nn.Module):
 
 
   def load_genome_test_embedding(self):
-    ATCC_genome_emb_dict = antibiotic_classifier.load_all_genome_embeddings(Path(self.config.sampling.genome_test_emb_dir_path.ATCC_genome_emb),
-                                                                            1e14,
-                                                                            'cpu',
-                                                                            'ATCC genome embedding')
-    ATCC_text_emb_dict = antibiotic_classifier.load_all_genome_embeddings(Path(self.config.sampling.genome_test_emb_dir_path.ATCC_text_emb),
-                                                                            1,
-                                                                            'cpu',
-                                                                            'ATCC text embedding')
-    text_only_emb_dict = antibiotic_classifier.load_text_wo_genome_embeddings(Path(self.config.sampling.genome_test_emb_dir_path.only_text_emb),
-                                                                            1,
-                                                                            'cpu',
-                                                                            'text only embedding')
+    ATCC_genome_emb_dict = load_atcc_embeddings(
+      Path(self.config.sampling.genome_test_emb_dir_path.ATCC_genome_emb),
+      scale=1e14,
+      device='cpu')
+    ATCC_text_emb_dict = load_atcc_embeddings(
+      Path(self.config.sampling.genome_test_emb_dir_path.ATCC_text_emb),
+      scale=1,
+      device='cpu')
+    text_only_emb_dict = load_text_embeddings(
+      Path(self.config.sampling.genome_test_emb_dir_path.only_text_emb),
+      scale=1,
+      device='cpu')
     strain_cond = str(self.config.sampling.strain)
     return ATCC_genome_emb_dict, ATCC_text_emb_dict, text_only_emb_dict, strain_cond
 
@@ -1248,17 +1249,17 @@ class DIT_Syn_Cls_Pep_Cls_AMP(nn.Module):
                   use_adaLN=use_adaLN))
     self.blocks_cls = nn.ModuleList(blocks_cls)
 
-    self.co_cross_attn_genome = antibiotic_classifier.FirstTokenAttention_genome(config.classifier_model.hidden_size,
+    self.co_cross_attn_genome = FirstTokenCrossAttention(config.classifier_model.hidden_size,
                                                                                  8192,
                                                                                  4,
                                                                                  0.1)
     self.co_cross_attn_genome = get_peft_model(self.co_cross_attn_genome, lora_config_co_cross)
-    self.co_cross_attn_text = antibiotic_classifier.FirstTokenAttention_genome(config.classifier_model.hidden_size,
+    self.co_cross_attn_text = FirstTokenCrossAttention(config.classifier_model.hidden_size,
                                                                                4096,
                                                                                4,
                                                                                0.1)
     self.co_cross_attn_text = get_peft_model(self.co_cross_attn_text, lora_config_co_cross)
-    self.reg_head = antibiotic_classifier.RegressionHead((8192+4096)*2, (8192+4096)//4, 128, 1, 0.2)
+    self.reg_head = RegressionHead((8192+4096)*2, (8192+4096)//4, 128, 1, 0.2)
     self.learnable_embedding_weight = nn.Parameter(torch.randn(1, 8192))
 
     self.ClsHead = ClsHead(input_dim=768, num_targets=1)
@@ -1334,18 +1335,18 @@ class DIT_Syn_Cls_Pep_Cls_AMP(nn.Module):
 
 
   def load_genome_test_embedding(self):
-    ATCC_genome_emb_dict = antibiotic_classifier.load_all_genome_embeddings(Path(self.config.sampling.genome_test_emb_dir_path.ATCC_genome_emb),
-                                                                            1e14,
-                                                                            'cpu',
-                                                                            'ATCC genome embedding')
-    ATCC_text_emb_dict = antibiotic_classifier.load_all_genome_embeddings(Path(self.config.sampling.genome_test_emb_dir_path.ATCC_text_emb),
-                                                                            1,
-                                                                            'cpu',
-                                                                            'ATCC text embedding')
-    text_only_emb_dict = antibiotic_classifier.load_text_wo_genome_embeddings(Path(self.config.sampling.genome_test_emb_dir_path.only_text_emb),
-                                                                            1,
-                                                                            'cpu',
-                                                                            'text only embedding')
+    ATCC_genome_emb_dict = load_atcc_embeddings(
+      Path(self.config.sampling.genome_test_emb_dir_path.ATCC_genome_emb),
+      scale=1e14,
+      device='cpu')
+    ATCC_text_emb_dict = load_atcc_embeddings(
+      Path(self.config.sampling.genome_test_emb_dir_path.ATCC_text_emb),
+      scale=1,
+      device='cpu')
+    text_only_emb_dict = load_text_embeddings(
+      Path(self.config.sampling.genome_test_emb_dir_path.only_text_emb),
+      scale=1,
+      device='cpu')
     strain_cond = str(self.config.sampling.strain)
     return ATCC_genome_emb_dict, ATCC_text_emb_dict, text_only_emb_dict, strain_cond
 

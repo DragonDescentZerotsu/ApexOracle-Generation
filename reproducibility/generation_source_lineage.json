@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "snapshot": {
+    "upstream_base_commit": "edb0f8c28b7caeb4ea7a06a2fee8d74ab6da1661",
+    "source_commit": "2368c25ce831c187e5b2699b85a6ae1a4cdca31a",
+    "annotated_tag": "legacy-code-snapshot-2026-08-10",
+    "tag_object": "c1e41c1719f31522b5619daf29ded76ceb703184"
+  },
+  "local_snapshot_sha256": {
+    "main.py": "47d26a6f21f3c2f641973d6516c52b55eb1cfcb4b2800494733763411e3ddd98",
+    "diffusion.py": "929a2e410db940b9fa045186ef55ea96ea6bf721504315c6a73d2a52fae8df5f",
+    "classifier.py": "5b7b5b65adda4e810da3539301a2149f6757eef5b1283fff62bfd79e259f1129",
+    "models/dit.py": "058d97e8ef3298efb4883b527cdd03d7660bb86ce41cfaa4124d9672e37d48a3",
+    "models/antibiotic_classifier.py": "1669d963c971098583653c3d8f66149bcfe64572aea53f274c4065d28f2f1f83",
+    "configs/config.yaml": "77e8e62ac1fd4764d889b667005d34bba9c4bccae58f8050d47aa175766018b7",
+    "configs/config_mdlm_cls.yaml": "2b649dba06fd8019e62a9466ca9ad6b78c87c2d47479b257c0ef7c46fbd2d154",
+    "configs/guidance/cbg_antibiotic.yaml": "1ae2957602ee8d797f8b60b7165b3a2bd899ecfcc43ec6d2546f8261f0708af5",
+    "configs/guidance/cbg_synergy.yaml": "22cd95257e303d4c9e9055cb384c0dd53e7af77053168049befcf731dc71159a"
+  },
+  "node002_sha256": {
+    "main.py": "7ad4f00d41fd74bdf02888266260296bac73aea6dd8e13a6565b078ba76f75f5",
+    "diffusion.py": "9ce4c422da23cc4152f7e0b5ba95fbc4ddcc881362fd97e4230e11a7f9f16c39",
+    "classifier.py": "5b7b5b65adda4e810da3539301a2149f6757eef5b1283fff62bfd79e259f1129",
+    "models/dit.py": "b8c05bae65daa2d2a018f4314b020978efb2ddbc4e41c11cd0e61a86fbb5531e",
+    "models/antibiotic_classifier.py": "817c8bcd2024654a8a75f85cf8aec4f8514a2be528f17919e8caadb81f8528eb",
+    "configs/config.yaml": "69feeb3570d25abf9a542249fd23766a781aba61743f92e977e08ddd2ac1fd3f",
+    "configs/config_mdlm_cls.yaml": "2b649dba06fd8019e62a9466ca9ad6b78c87c2d47479b257c0ef7c46fbd2d154",
+    "configs/guidance/cbg_antibiotic.yaml": "a54633900f002a25430a6f0fe51bc50e055968e7faef395130c5a195980ec1f7",
+    "configs/guidance/cbg_synergy.yaml": "b7aa6bd1c1299a6e825600358cf8ff59e88bfd94668ee27dbd57f473b33e8ccc"
+  },
+  "historical_resolved_config_sha256": {
+    "guided_2025-06-11": "d292b32c0b3674cd1a60d61802b228b5bfde3aef3e9a18dcdf0c32fa94917d45",
+    "historically_labeled_unconditional_2025-06-16": "27fa7b946bc433fb98e8588658d8f9378f147e35eaba17722e9be78132627465"
+  },
+  "verified_facts": [
+    "Local and node002 are based on the same upstream commit but preserve different ApexOracle source/config versions.",
+    "classifier.py and configs/config_mdlm_cls.yaml are byte-identical across the two audited hosts; the other listed core paths are not.",
+    "No Mac checkout was accessible during this audit; Mac-only source identity remains unverified."
+  ]
+}

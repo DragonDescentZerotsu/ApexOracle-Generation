@@ -4,8 +4,11 @@
 
 - 本文件及后续维护说明应尽量使用中文；代码文件名、配置键、模型名、指标缩写和命令可保留英文。
 - 新增结论时必须区分：**已由代码或日志验证的事实**、**根据现有证据作出的推断**、**仍待作者确认的事项**。
-- **当前作者决定：**本仓库暂时只做只读审计和功能记录，不重构源码，不修改实验配置，不重新生成或覆盖任何结果。
-- 除维护本 `AGENTS.md` 外，未经作者明确同意，不得修改本仓库中的代码、YAML、脚本、checkpoint、cache、运行输出或数据。
+- **2026-08-10 作者已明确开始 Generation 重构：**先建立 source-only snapshot，再按可验证 contract 增量迁移；
+  仍不得覆盖历史实验配置、结果、checkpoint、cache 或数据。当前计划、恢复点和验收状态记录在
+  `REFACTOR_PLAN.md`、`docs/LEGACY_SNAPSHOT.md` 与 `docs/MDLM_INTEGRATION.md`。
+- 除上述已授权重构范围外，不得修改 checkpoint、cache、历史运行输出或数据；新 smoke/parity 只能写入全新
+  ignored 目录。
 
 ## 仓库定位
 
@@ -21,6 +24,18 @@
 - 审计时 `HEAD`、本地 `main` 和 `origin/main` 均为 upstream commit `edb0f8c28b7caeb4ea7a06a2fee8d74ab6da1661`（`Clean up`）。
 - 当前工作树已有大量作者历史改动和未跟踪文件；ApexOracle 的关键定制实现尚未形成独立、干净的 commit。
 - `/data2/tianang/projects/discrete-diffusion-guidance` 与 `node002:/data1/tianang/Projects/discrete-diffusion-guidance` 的部分关键文件内容不同，说明两台机器保存了不同历史阶段。
+- **2026-08-10 source-only 恢复点已建立：** commit
+  `2368c25ce831c187e5b2699b85a6ae1a4cdca31a`、annotated tag
+  `legacy-code-snapshot-2026-08-10`；cache、outputs、checkpoint、数据和论文 PDF 均未纳入。当前只有上游
+  `origin`，branch/tag 尚未 push，严禁推到 `kuleshov-group`。
+- **2026-08-10 MDLM integration 已验证：**三个 ApexOracle predictor 家族改用
+  `apexoracle_mdlm.models.FirstTokenCrossAttention`、`RegressionHead` 和 canonical embedding loaders；无 live
+  caller 的 `models/antibiotic_classifier.py` duplicate 已由 snapshot 保存后从 active tree 删除。正式权重下
+  fixed 2×64 token guidance forward 与对全部 one-hot token 的 gradient 均 `torch.equal`；canonical 完成
+  BAA-3170、length 368、256 steps、15/15 guidance 的 full sampler。legacy 同 seed 两次 token SHA 不同，
+  deterministic mode 又被 CUDA `cumsum` 明确拒绝，因此 final token byte equality 不是合法 gate。精确 hash、
+  命令边界和解释见 `docs/MDLM_INTEGRATION.md` 与
+  `reproducibility/full_sampler_mdlm_parity.json`。
 
 ### 操作约束
 
@@ -205,6 +220,9 @@ Genome embedding 和 strain text embedding 当前通过 Synergy 路径读取。�
 - 该文件描述的是历史环境约束，不代表当前机器已有一个逐项完全一致且已验证的可复现环境。
 - 生成过程会同时加载多个大 checkpoint，GPU 显存和主机内存需求较高。不得把导入成功当成端到端验证。
 - 当前配置包含机器绝对路径；未来发布需要显式 manifest/环境变量解析，但本阶段不修改。
+- MDLM integration 的开发/测试入口为
+  `PYTHONPATH=/path/to/ApexOracle-MDLM/src python -m pytest -q tests/test_apexoracle_mdlm_integration.py`；super-repo
+  负责固定 MDLM submodule commit 并安装该 package。Generation 不通过硬编码绝对路径查找 MDLM source。
 - 历史 YAML 中可能存在 `Ture` 等拼写，源码中也有 `guaidance` 等历史命名。任何修正都必须先冻结 resolved config 和行为测试，不能静默“清理”。
 
 ## 后续重构前的最低验收标准
