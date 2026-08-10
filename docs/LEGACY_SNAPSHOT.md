@@ -28,8 +28,8 @@ git worktree add --detach /tmp/apexoracle-generation-legacy \
   legacy-code-snapshot-2026-08-10
 ```
 
-不得 reset 当前重构分支到该 tag，也不得把 snapshot 推送到上游 `kuleshov-group`。创建 ApexOracle 自有
-Generation remote 后，tag 应与 clean branch 一起显式推送，用于逐文件恢复而不是作为默认分支。
+不得 reset 当前重构分支到该 tag，也不得把 snapshot 推送到上游 `kuleshov-group`。该 tag 已与 clean
+`main` 显式推送到 `DragonDescentZerotsu/ApexOracle-Generation`，用于逐文件恢复而不是作为默认分支。
 
 ## 未纳入 Git 的资产
 

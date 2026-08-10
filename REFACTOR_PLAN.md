@@ -55,16 +55,19 @@ PYTHONPATH=/path/to/ApexOracle-MDLM/src \
 协议、资产 hash、输出安全与 smoke hashes 见 `docs/PAPER_MIC_PEPTIDE_CONFIG.md` 和
 `reproducibility/paper_mic_peptide_protocol.json`。
 
-### G3：clean module release——进行中
+### G3：clean module release——完成
 
 - [x] 审计并清理无 caller 的 `debug.py`、unused `diffusion_mdlm.py`、13 个重复/硬编码 launcher 和四个
   shell orchestrators；完整 source 由 recovery tag 保留；
 - [x] 用 `run_mic_peptide_grid.py` 统一未来多 strain/length/GPU 扫描，不保留项目专用命名；
 - [x] 保留 upstream Apache-2.0 `LICENSE`，新增 `NOTICE` 与安装/外部资产边界；
 - [x] 新增 release-tree audit，检查恢复点、active legacy、大文件和 canonical entry 中的作者绝对路径；
-- [ ] 完成 clean commit、fresh-clone tests/dry-run；
-- [ ] 创建独立 `DragonDescentZerotsu/ApexOracle-Generation` remote，只推 clean branch 与 recovery tag；
-- [ ] 由 super-repo 固定最终 clean commit，不直接推上游 `origin`。
+- [x] clean code commit 为 `3a68dd0`；fresh clone release audit、全仓 14 tests 和两个 paper strain 的
+  resolved-config dry-run 通过；
+- [x] public `DragonDescentZerotsu/ApexOracle-Generation` 已创建，clean branch 为默认 `main`，annotated
+  recovery tag 已单独推送；上游 `origin` 未改写、未推送；
+- [x] Generation module 已达到可由 super-repo 固定 gitlink 的 gate；最终 gitlink 使用远程 `main` 的发布
+  metadata commit，而不使用 upstream `origin/main`。
 
 ## 变更控制
 

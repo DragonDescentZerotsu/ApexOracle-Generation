@@ -41,8 +41,9 @@ sampler、guidance strength 或 remasking schedule。
 继续保留为明确标注的 experimental extension，不会由本 preset 隐式启用。
 
 资产 hash、输出安全合同和协议数值的机器可读版本见
-`reproducibility/paper_mic_peptide_protocol.json`。当前仓库仍只有上游 remote；在创建
-`DragonDescentZerotsu/ApexOracle-Generation` 前，不得 push 此分支或 recovery tag。
+`reproducibility/paper_mic_peptide_protocol.json`。发布仓库为
+`DragonDescentZerotsu/ApexOracle-Generation`；上游 `kuleshov-group` remote 只用于追溯，不接收 ApexOracle
+commits。
 
 ## 论文后多菌株扫描
 

@@ -51,6 +51,10 @@
   `reproducibility/g3_legacy_cleanup.json`。验证命令为 `python scripts/audit/check_release_tree.py` 以及
   `PYTHONPATH=/path/to/ApexOracle-MDLM/src python -m pytest -q tests/test_apexoracle_mdlm_integration.py
   tests/test_paper_mic_peptide_config.py tests/test_generation_grid.py tests/test_release_tree.py`。
+- **2026-08-10 Generation clean release：** public remote
+  `https://github.com/DragonDescentZerotsu/ApexOracle-Generation.git` 已创建，默认分支为 `main`；G3 code commit
+  `3a68dd0` 与 annotated recovery tag 已推送。fresh clone 的 release audit、全仓 14 tests 和双 strain
+  resolved-config dry-run 均通过。`origin` 继续指向 `kuleshov-group`，严禁向其推送 ApexOracle commits。
 
 ### 操作约束
 
