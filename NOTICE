@@ -1,0 +1,14 @@
+ApexOracle-Generation
+Copyright 2026 ApexOracle contributors
+
+This distribution is based on the Apache-2.0-licensed project
+"Simple Guidance Mechanisms for Discrete Diffusion Models":
+https://github.com/kuleshov-group/discrete-diffusion-guidance
+
+ApexOracle-specific modifications add SELFIES generation with MIC and peptide
+guidance, a remasking schedule, portable release launchers, and integration with
+the separately distributed ApexOracle-MDLM and ApexOracle-Core modules.
+
+Model weights, datasets, tokenizer assets, and other external dependencies are
+not included in this source repository and remain subject to their respective
+licenses and terms.

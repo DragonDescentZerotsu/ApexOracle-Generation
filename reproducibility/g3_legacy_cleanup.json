@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "date": "2026-08-10",
+  "status": "delete_ready",
+  "recovery_ref": "legacy-code-snapshot-2026-08-10",
+  "caller_audit": {
+    "repositories": [
+      "ApexOracle-Generation",
+      "ApexOracle-Core",
+      "ApexOracle-MDLM"
+    ],
+    "live_runtime_consumers": 0
+  },
+  "debug_source": {
+    "path": "debug.py",
+    "sha256": "8f5ea7997837d61a41ac39c0b402f8c04390332b7cc1059936479f409e0ff810",
+    "bytes": 717,
+    "lines": 28,
+    "behavior": "imports broad training dependencies, hard-codes an obsolete checkpoint, loads it on CPU and prints 0",
+    "unique_release_behavior": false,
+    "replacement": "none; checkpoint loading is exercised by the portable launcher and sampler smoke"
+  },
+  "unused_diffusion_copy": {
+    "path": "diffusion_mdlm.py",
+    "sha256": "cfa139f7985a3dd80129e54bc08e141e30f41dee38baaacf6e96aada492bb8c5",
+    "bytes": 36078,
+    "lines": 1015,
+    "only_generation_reference": "unused main.py import",
+    "upstream_runtime_comparison": {
+      "path": "ApexOracle-MDLM/diffusion.py",
+      "sha256": "1ee417356146ea0e3bd6e0a1ded167ce031a4fb1114ee62f3c0c7ea5704fe7f6",
+      "text_diff_hunks": 3,
+      "substantive_difference": "the duplicate uses tokenizer.vocab_size instead of one historical hard-coded vocab size; current Generation diffusion.py already uses tokenizer-derived vocabulary"
+    },
+    "unique_apexoracle_sampler_behavior": false,
+    "replacement": "diffusion.py is the sole active Generation runtime; historical semi-AR MDLM code remains in the upstream MDLM module and recovery tag"
+  },
+  "historical_launchers": {
+    "active_command_total_including_duplicates": 213,
+    "unique_normalized_strain_length_jobs": 198,
+    "all_target_mic": 1,
+    "canonical_replacement": "scripts/reproduce/run_mic_peptide_grid.py",
+    "boundary": "These grids are post-paper or unconfirmed extensions. They are not the frozen paper run.",
+    "files": [
+      {
+        "path": "scripts/mol_generate_gpu_0.sh",
+        "sha256": "f01e89a02d482e9b67ca397f4bd0e46816cb19cab9e20c281880a9af42589dec",
+        "bytes": 6219,
+        "strain": "11775",
+        "device": 0,
+        "active_lengths": [280, 308, 340, 356, 368]
+      },
+      {
+        "path": "scripts/mol_generate_gpu_00.sh",
+        "sha256": "f01e89a02d482e9b67ca397f4bd0e46816cb19cab9e20c281880a9af42589dec",
+        "bytes": 6219,
+        "strain": "11775",
+        "device": 0,
+        "active_lengths": [280, 308, 340, 356, 368]
+      },
+      {
+        "path": "scripts/mol_generate_gpu_00_11775.sh",
+        "sha256": "f01e89a02d482e9b67ca397f4bd0e46816cb19cab9e20c281880a9af42589dec",
+        "bytes": 6219,
+        "strain": "11775",
+        "device": 0,
+        "active_lengths": [280, 308, 340, 356, 368]
+      },
+      {
+        "path": "scripts/mol_generate_gpu_01_12600.sh",
+        "sha256": "5b252600ca215c326110be09393a6f15f8cded08d343c8489d19d78542c7d2fc",
+        "bytes": 6217,
+        "strain": "12600",
+        "device": 0,
+        "active_lengths": [280, 296, 308, 340, 356, 368, 392]
+      },
+      {
+        "path": "scripts/mol_generate_gpu_1.sh",
+        "sha256": "9b4f8058f496c5642fcdc6e63266b480a5a113a94fdee8227056ee507deff6a3",
+        "bytes": 6142,
+        "strain": "BS60",
+        "device": 0,
+        "active_length_range": [256, 416, 4]
+      },
+      {
+        "path": "scripts/mol_generate_gpu_10_#004.sh",
+        "sha256": "3bd6238dee94a6e8b9027d33f54a33c147d7310c0a9223cf0b94700b05b02f1c",
+        "bytes": 6342,
+        "strain": "#004",
+        "device": 1,
+        "active_lengths": [280, 308, 340, 356, 368]
+      },
+      {
+        "path": "scripts/mol_generate_gpu_11_BAA-1556.sh",
+        "sha256": "35b81a555e6b39f3de1fc1ab9e81c617019d3c6f4658f45c5f671bd5fce4379e",
+        "bytes": 6340,
+        "strain": "BAA-1556",
+        "device": 1,
+        "active_lengths": [280, 296, 308, 340, 356, 368, 392]
+      },
+      {
+        "path": "scripts/mol_generate_gpu_2.sh",
+        "sha256": "853a14b9ded1960bad9d836236072c6bccce6d671005d1fb59a31a78edf23d45",
+        "bytes": 6142,
+        "strain": "BS66",
+        "device": 1,
+        "active_length_range": [256, 416, 4]
+      },
+      {
+        "path": "scripts/mol_generate_gpu_20.sh",
+        "sha256": "6d8bee0d724e0ddceca87242c74054bc43a9adceb83873e3b4ffe3b79054c3d4",
+        "bytes": 6219,
+        "strain": "47085",
+        "device": 2,
+        "active_lengths": [280, 308, 340, 356, 368]
+      },
+      {
+        "path": "scripts/mol_generate_gpu_20_PAO1.sh",
+        "sha256": "6d8bee0d724e0ddceca87242c74054bc43a9adceb83873e3b4ffe3b79054c3d4",
+        "bytes": 6219,
+        "strain": "47085",
+        "device": 2,
+        "active_lengths": [280, 308, 340, 356, 368]
+      },
+      {
+        "path": "scripts/mol_generate_gpu_3.sh",
+        "sha256": "4b4eea164e0a7625ff3dd520f4fd89964818857f3f992d91198e626586f349e9",
+        "bytes": 6142,
+        "strain": "BS70",
+        "device": 1,
+        "active_length_range": [256, 416, 4]
+      },
+      {
+        "path": "scripts/mol_generate_gpu_30_#002_PA14.sh",
+        "sha256": "d1391298d009287d24403067e8280bc0df169eaccf5d0574a14319c70bd31315",
+        "bytes": 6342,
+        "strain": "#002",
+        "device": 3,
+        "active_lengths": [280, 308, 340, 356, 368]
+      },
+      {
+        "path": "scripts/mol_generate_gpu_4.sh",
+        "sha256": "28fb6bf3ad1bdd02659e294db5cb6428bc202d4f4f8ae2a3ca96c0735b47f4bd",
+        "bytes": 6142,
+        "strain": "BS86",
+        "device": 1,
+        "active_length_range": [256, 416, 4]
+      }
+    ]
+  },
+  "historical_orchestrators": [
+    {
+      "path": "scripts/temp_Ben_gpu_0.sh",
+      "sha256": "86673c3e8388bb6345300464109bb9ec58e6ac4928f55fe408f6b87b92be737d",
+      "referenced_launcher_count": 2
+    },
+    {
+      "path": "scripts/temp_Ben_gpu_1.sh",
+      "sha256": "c19e7b63dea8f51da0448b273b814b41e9bcd6944454644046ecca733aef4c99",
+      "referenced_launcher_count": 2
+    },
+    {
+      "path": "scripts/temp_Ben_gpu_2.sh",
+      "sha256": "fe0e39f8b0aed554c3173550984df6145734925a6b9434fbea5d41a2aafe8387",
+      "referenced_launcher_count": 1
+    },
+    {
+      "path": "scripts/temp_Ben_gpu_3.sh",
+      "sha256": "1ddf83c09d20f5a38941b20029db795990d3433e612176385a2638ef417262db",
+      "referenced_launcher_count": 1
+    }
+  ],
+  "deletion_gate": {
+    "snapshot_recovery": true,
+    "source_hashes_recorded": true,
+    "cross_repository_caller_scan_zero": true,
+    "generic_grid_replacement_present": true,
+    "paper_sampler_and_portable_entry_validated": true
+  }
+}

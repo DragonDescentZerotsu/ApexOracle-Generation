@@ -84,6 +84,23 @@ def test_smoke_command_changes_only_workload_size() -> None:
     assert command[-3:] == ["--cfg", "job", "--resolve"]
 
 
+def test_extension_command_accepts_explicit_strain_and_workload() -> None:
+    launcher = load_launcher()
+    command = launcher.build_command(
+        ROOT,
+        strain="custom-strain",
+        target_length=300,
+        smoke=False,
+        dry_run=False,
+        global_batch_size=4,
+        num_sample_batches=3,
+    )
+    assert "sampling.strain=custom-strain" in command
+    assert "sampling.target_length=300" in command
+    assert "loader.global_batch_size=4" in command
+    assert "sampling.num_sample_batches=3" in command
+
+
 def test_machine_readable_protocol_matches_preset() -> None:
     manifest = json.loads(
         (ROOT / "reproducibility" / "paper_mic_peptide_protocol.json").read_text(

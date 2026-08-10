@@ -44,6 +44,13 @@
   `PYTHONPATH=/path/to/ApexOracle-MDLM/src python -m pytest -q
   tests/test_apexoracle_mdlm_integration.py tests/test_paper_mic_peptide_config.py`。完整边界见
   `docs/PAPER_MIC_PEPTIDE_CONFIG.md` 与 `reproducibility/paper_mic_peptide_protocol.json`。
+- **2026-08-10 G3 legacy cleanup：** `debug.py` 无 caller/产物，`diffusion_mdlm.py` 无 symbol consumer 且不含
+  当前 `diffusion.py` 之外的 ApexOracle sampler 行为；13 个硬编码 `mol_generate_gpu_*` 与四个只负责串行调用的
+  `temp_Ben_gpu_*` 已由通用 `scripts/reproduce/run_mic_peptide_grid.py` 替代。上述文件及先前删除的 duplicate
+  全部保留在 annotated recovery tag，逐文件 SHA-256/caller/replacement gate 见
+  `reproducibility/g3_legacy_cleanup.json`。验证命令为 `python scripts/audit/check_release_tree.py` 以及
+  `PYTHONPATH=/path/to/ApexOracle-MDLM/src python -m pytest -q tests/test_apexoracle_mdlm_integration.py
+  tests/test_paper_mic_peptide_config.py tests/test_generation_grid.py tests/test_release_tree.py`。
 
 ### 操作约束
 
@@ -90,9 +97,10 @@ Hydra 配置
   - `DIT_Reg_Cls_AMP` 加载 noisy MIC regressor、peptide classifier、genome embedding 和 strain text embedding，是论文 MIC+peptide guidance 的主要 predictor。
   - `DIT_Syn_Cls_Pep_Cls_AMP` 属于后续 synergy-guided generation 路径，不应混入当前论文 MIC guidance 的复现说明。
 
-- `models/antibiotic_classifier.py`
-  - 提供从 Synergy/ApexOracle 代码迁入的 genome/text fusion、attention 和 regression head 等组件。
-  - 当前文件还包含较多历史训练与数据代码；在本阶段只记录，不清理。
+- `apexoracle_mdlm.models`（外部 module）
+  - 提供 Generation predictor 使用的 canonical genome/text fusion、attention 和 regression heads。
+  - 旧 `models/antibiotic_classifier.py` duplicate 已完成正式 checkpoint output/gradient parity 后从 active tree
+    删除，仍可由 recovery tag 恢复。
 
 - `eval_utils.py`
   - 负责 SELFIES 有效性检查、RDKit molecule 构建和绘图，以及生成字符串保存。
@@ -115,24 +123,18 @@ Hydra 配置
 - `configs/guidance/nos_antibiotic.yaml`
   - NOS 风格的替代或探索性 guidance 配置，不是已确认的论文终版入口。
 
-- `scripts/mol_generate_gpu_*.sh`
-  - 不同 GPU、strain、长度和历史实验的启动脚本。
-  - node002 上的早期 BAA-3170/BAA-3197 脚本更接近论文阶段；本机多菌株批处理脚本大多属于后续筛选或 benchmark。必须逐个读取参数，不能仅按文件名认定血缘。
+- `scripts/reproduce/run_paper_mic_peptide.py`
+  - frozen paper MIC+peptide preset 的 portable launcher；只接收显式 module roots 和全新 output directory。
 
-- `scripts/temp_Ben_gpu_*.sh`
-  - 后续批量生成任务的编排脚本，不应自动归入论文最终运行。
-
-- `diffusion_mdlm.py`
-  - 本地存在的另一套 MDLM/扩散实现。当前 `guide_sample_AMP` 主调用链没有实例化它；其精确历史用途仍待确认。
+- `scripts/reproduce/run_mic_peptide_grid.py`
+  - 论文后通用 `strain × length × device` CSV grid；同一 device 顺序、不同 device 并行，每个 job 独立输出。
+  - 必须显式传 `--confirm-experimental-extension`，不得把 grid 冒充 frozen paper run。
 
 - `dataloader.py`、`noise_schedule.py`、`tokenizer.py`
   - 主要是上游数据、噪声日程和 tokenizer 支持代码。ApexOracle 的当前主路径使用 SELFIES-TED tokenizer，而不是据此断言这些文件全部无关。
 
 - `models/dimamba.py`、`models/unet.py`、`guidance_eval/`、`custom_datasets/`、上游 notebooks 和通用 scripts
   - 属于上游替代 backbone、数据集或评估基础设施；不是已确认的论文 ApexOracle 生成主调用链。
-
-- `debug.py`
-  - 探索/debug 文件，不是正式入口。
 
 - `outputs/`
   - Hydra resolved config、日志、生成 SELFIES 文本和分子图片等历史运行证据。只读保留，不能原地重跑覆盖。
@@ -216,8 +218,7 @@ Genome embedding 和 strain text embedding 当前通过 Synergy 路径读取。�
 ### 论文后或尚未确认的扩展
 
 - `cbg_synergy.yaml`、`DIT_Syn_Cls_Pep_Cls_AMP` 和 synergy-guided generation。
-- 当前 `mol_generate_gpu_*` 中面向更多 BS/ATCC/PAO1/PA14 strain 的大批量生成。
-- `temp_Ben_gpu_*` 批处理。
+- recovery tag 中面向更多 BS/ATCC/PAO1/PA14 strain 的历史硬编码批量生成；active tree 统一使用 CSV grid。
 - Mac 上后续大型 generation benchmark 目录或 CSV。
 
 这些代码可以保留在外部工具仓库中，但未来发布时应与论文主复现入口分开标注。
@@ -227,21 +228,19 @@ Genome embedding 和 strain text embedding 当前通过 Synergy 路径读取。�
 - `requirements.yaml` 记录的上游环境名为 `discdiff`，包括 Python 3.9、PyTorch 2.2.2、CUDA 12.4、Lightning 2.2.1、Transformers 4.38.2、RDKit、SELFIES、flash-attn 和 mamba 等依赖。
 - 该文件描述的是历史环境约束，不代表当前机器已有一个逐项完全一致且已验证的可复现环境。
 - 生成过程会同时加载多个大 checkpoint，GPU 显存和主机内存需求较高。不得把导入成功当成端到端验证。
-- 当前配置包含机器绝对路径；未来发布需要显式 manifest/环境变量解析，但本阶段不修改。
+- 历史 root config 仍包含机器绝对路径，仅作 upstream/legacy workspace 兼容；canonical paper preset 和两个
+  release launchers 不含作者机器绝对路径。
 - MDLM integration 的开发/测试入口为
   `PYTHONPATH=/path/to/ApexOracle-MDLM/src python -m pytest -q tests/test_apexoracle_mdlm_integration.py`；super-repo
   负责固定 MDLM submodule commit 并安装该 package。Generation 不通过硬编码绝对路径查找 MDLM source。
 - 历史 YAML 中可能存在 `Ture` 等拼写，源码中也有 `guaidance` 等历史命名。任何修正都必须先冻结 resolved config 和行为测试，不能静默“清理”。
 
-## 后续重构前的最低验收标准
+## 当前发布验收标准
 
-只有作者明确开始 generation 重构后，才执行以下工作：
-
-1. 冻结本机、node002 和 Mac 的源文件、resolved config、关键输出和 checkpoint SHA-256 清单。
-2. 由作者确认论文最终两类 strain、长度、每组样本数、随机运行、guided/unguided 定义和 Fig. 3 数据来源。
-3. 从历史工作树提取最小论文调用链，并与上游通用实现及论文后 synergy 扩展隔离。
-4. 建立只读输入、全新输出目录的 smoke test；禁止覆盖历史 `outputs/`。
-5. 验证固定配置能加载所有 checkpoint，完成至少一个小 batch，并检查 SELFIES/RDKit 输出契约。
-6. 再建立干净 commit、tag 和独立远程仓库，最后才在 ApexOracle 中固定为 submodule。
-
-在完成以上条件前，不得声称当前 upstream `HEAD`、当前根配置或任意单个 shell script 就是论文生成代码的完整可复现版本。
+1. `legacy-code-snapshot-2026-08-10` 必须可恢复所有被清理 source；不得删除或覆盖该 tag。
+2. Canonical paper launcher 必须保持 256-step、15/15 guidance 与 remasking schedule，且拒绝复用 output。
+3. Generic grid 必须继续调用 canonical launcher；未来 case-study 只把 job/data lineage 写进外部 manifest，不能
+   复制新的项目专用 launcher 到 active tree。
+4. `python scripts/audit/check_release_tree.py`、focused tests 和 fresh-clone dry-run 必须通过。
+5. checkpoint、embedding、outputs、cache、论文 PDF 和项目数据不进入 Git；只将 clean branch/tag 推到
+   ApexOracle 自有 remote，永远不推上游 `kuleshov-group`。

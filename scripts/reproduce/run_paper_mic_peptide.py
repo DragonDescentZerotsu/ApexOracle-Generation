@@ -55,9 +55,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mdlm-root", type=Path, required=True)
     parser.add_argument("--core-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--strain", choices=tuple(STRAIN_LENGTHS), default="BAA-3170")
+    parser.add_argument("--strain", default="BAA-3170")
     parser.add_argument("--target-length", type=int)
     parser.add_argument("--device", type=int, default=0)
+    parser.add_argument("--global-batch-size", type=int)
+    parser.add_argument("--num-sample-batches", type=int)
     parser.add_argument(
         "--smoke",
         action="store_true",
@@ -163,6 +165,8 @@ def build_command(
     target_length: int,
     smoke: bool,
     dry_run: bool,
+    global_batch_size: int | None = None,
+    num_sample_batches: int | None = None,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -174,6 +178,11 @@ def build_command(
     ]
     if smoke:
         command.extend(["loader.global_batch_size=1", "sampling.num_sample_batches=1"])
+    else:
+        if global_batch_size is not None:
+            command.append(f"loader.global_batch_size={global_batch_size}")
+        if num_sample_batches is not None:
+            command.append(f"sampling.num_sample_batches={num_sample_batches}")
     if dry_run:
         command.extend(["--cfg", "job", "--resolve"])
     return command
@@ -216,7 +225,27 @@ def main() -> None:
     mdlm_root = args.mdlm_root.expanduser().resolve()
     core_root = args.core_root.expanduser().resolve()
     output_dir = validate_new_output_directory(args.output_dir)
-    target_length = args.target_length or STRAIN_LENGTHS[args.strain]
+    if args.target_length is None:
+        if args.strain not in STRAIN_LENGTHS:
+            raise ValueError(
+                "--target-length is required for strains outside the two paper defaults"
+            )
+        target_length = STRAIN_LENGTHS[args.strain]
+    else:
+        target_length = args.target_length
+    for name, value in (
+        ("target_length", target_length),
+        ("global_batch_size", args.global_batch_size),
+        ("num_sample_batches", args.num_sample_batches),
+    ):
+        if value is not None and value <= 0:
+            raise ValueError(f"{name} must be positive, found {value}")
+    if args.smoke and (
+        args.global_batch_size is not None or args.num_sample_batches is not None
+    ):
+        raise ValueError(
+            "--smoke cannot be combined with explicit workload-size overrides"
+        )
     assets = validate_roots_and_assets(
         generation_root,
         mdlm_root,
@@ -247,6 +276,8 @@ def main() -> None:
         target_length=target_length,
         smoke=args.smoke,
         dry_run=args.dry_run,
+        global_batch_size=args.global_batch_size,
+        num_sample_batches=args.num_sample_batches,
     )
 
     launch = {
@@ -256,6 +287,7 @@ def main() -> None:
         "dry_run": args.dry_run,
         "strain": args.strain,
         "target_length": target_length,
+        "paper_default_strain": args.strain in STRAIN_LENGTHS,
         "output_dir": str(output_dir),
         "command": command,
         "assets": assets,

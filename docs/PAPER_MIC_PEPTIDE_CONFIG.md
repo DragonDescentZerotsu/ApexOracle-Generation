@@ -43,3 +43,28 @@ sampler、guidance strength 或 remasking schedule。
 资产 hash、输出安全合同和协议数值的机器可读版本见
 `reproducibility/paper_mic_peptide_protocol.json`。当前仓库仍只有上游 remote；在创建
 `DragonDescentZerotsu/ApexOracle-Generation` 前，不得 push 此分支或 recovery tag。
+
+## 论文后多菌株扫描
+
+以后类似 peptide library、strain panel 或长度网格的扫描，不再复制按 GPU 命名的 shell scripts。先建立 CSV：
+
+```csv
+job_id,strain,target_length,device,global_batch_size,num_sample_batches
+example_3170,BAA-3170,368,0,50,10
+example_custom,ATCC-EXAMPLE,256,1,50,10
+```
+
+再运行：
+
+```bash
+python scripts/reproduce/run_mic_peptide_grid.py \
+  --job-manifest jobs.csv \
+  --mdlm-root /path/to/ApexOracle-MDLM \
+  --core-root /path/to/ApexOracle-Core \
+  --output-root /path/to/new-grid-run \
+  --confirm-experimental-extension
+```
+
+同一 GPU 的 jobs 顺序运行，不同 GPU queues 并行。每个 job 仍调用本页的 canonical launcher，拥有独立的新
+output directory，并记录 resolved command。任意非论文默认 strain 都必须显式给出 `target_length`；这个入口
+只是一项通用实验能力，不能把未来的项目数据或结果混入本仓库。

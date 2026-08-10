@@ -1,1 +1,0 @@
-sh ./mol_generate_gpu_30_#002_PA14.sh
