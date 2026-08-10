@@ -14,7 +14,8 @@ checkpoint schema 或历史输出；数据、checkpoint、cache、Hydra outputs 
 - annotated tag：`legacy-code-snapshot-2026-08-10`；
 - snapshot 排除约 5.8 GB `cache_data/`、约 13 GB `outputs/`、checkpoint、数据和论文 PDF；
 - 本机与 node002 的关键 source/config SHA-256 已分别冻结，确认两者不是同一个历史版本；
-- 当前只有上游 `origin`，snapshot/tag 尚未 push，绝不能推到 `kuleshov-group`。
+- annotated snapshot tag 已推送 `DragonDescentZerotsu/ApexOracle-Generation`；上游 `kuleshov-group`
+  未接收任何 ApexOracle commit。
 
 恢复方法与资产边界见 `docs/LEGACY_SNAPSHOT.md`，机器间血缘见
 `reproducibility/generation_source_lineage.json`。
@@ -68,6 +69,18 @@ PYTHONPATH=/path/to/ApexOracle-MDLM/src \
   recovery tag 已单独推送；上游 `origin` 未改写、未推送；
 - [x] Generation module 已达到可由 super-repo 固定 gitlink 的 gate；最终 gitlink 使用远程 `main` 的发布
   metadata commit，而不使用 upstream `origin/main`。
+
+### G4：compact public assets 与统一 release——完成
+
+- [x] Hugging Face `Kiria-Nozan/ApexOracle-Generation` revision
+  `2fb1aa08187eaa359263be6c12c8a41868d8959c` 固定三个 inference-only checkpoints 与 BAA-3170
+  genome/text conditions，共 4,059,311,443 bytes；逐文件 SHA-256 位于 Hub `manifest.json`；
+- [x] `run_paper_mic_peptide.py --asset-root` 只接受 compact BAA-3170 profile，同时保留完整 paper
+  condition-bank 的显式外部路径模式；
+- [x] 空 Hub cache 下载、全部 hashes、fresh recursive super-repo clone 和真实 H100 256-step/15/15/
+  remasking one-sample smoke 均通过；该 smoke 只验证 runtime/output contract，不代表确定性、yield 或 activity；
+- [x] clean implementation commit `80d9a2cf9b0921f29e4a44edf5557ccac39f5af9` 已由 ApexOracle
+  `v0.2.0` source release 固定。
 
 ## 变更控制
 

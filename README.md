@@ -6,6 +6,10 @@
 > `scripts/reproduce/run_mic_peptide_grid.py`. Experimental extensions are not part of the frozen paper preset.
 > Public inference-only BAA-3170 smoke assets are pinned at
 > [Kiria-Nozan/ApexOracle-Generation](https://huggingface.co/Kiria-Nozan/ApexOracle-Generation/tree/2fb1aa08187eaa359263be6c12c8a41868d8959c).
+> The ApexOracle clean implementation is maintained in this public fork and is pinned by the
+> [ApexOracle v0.2.0](https://github.com/DragonDescentZerotsu/ApexOracle/releases/tag/v0.2.0) source release.
+> Removed historical ApexOracle source remains recoverable from the annotated tag
+> `legacy-code-snapshot-2026-08-10`; model weights, conditions, caches, and outputs are external assets.
 
 [![arXiv](https://img.shields.io/badge/arXiv-2412.10193-red.svg)](https://arxiv.org/abs/2412.10193)
 [![deploy](https://img.shields.io/badge/Blog%20%20-8A2BE2)](https://discrete-diffusion-guidance.github.io/)

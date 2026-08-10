@@ -12,22 +12,28 @@
 
 ## 仓库定位
 
-- 本仓库上游为 `kuleshov-group/discrete-diffusion-guidance`，许可证为 Apache-2.0；当前 remote 为 `https://github.com/kuleshov-group/discrete-diffusion-guidance.git`。
+- 本仓库上游为 `kuleshov-group/discrete-diffusion-guidance`，许可证为 Apache-2.0；ApexOracle 的公开 fork
+  为 `DragonDescentZerotsu/ApexOracle-Generation`，上游 remote 只用于读取和血缘核验。
 - 上游项目实现离散扩散模型及多种 guidance 方法。本地工作树在此基础上加入了 ApexOracle 的 SELFIES 分子生成、MIC guidance、peptide guidance 和后续 synergy guidance。
-- ApexOracle 主仓库不应复制这里的生成实现。未来更适合把本项目作为独立外部仓库维护，并在 ApexOracle 中使用固定 commit 的 submodule 或文档链接。
-- **重要：**未来创建 submodule 前，必须先将这里的本地改动整理为可审计的独立仓库提交，固定权重和配置清单，并完成最小复现测试。当前 `main` 的 upstream commit 不能代表完整的论文生成实现。
+- ApexOracle 主仓库不复制这里的生成实现；当前实现已作为独立模块维护，并由 super-repo 使用固定 commit
+  的 submodule 引用。
+- **当前公开边界：** clean implementation commit `80d9a2cf9b0921f29e4a44edf5557ccac39f5af9` 已由
+  ApexOracle `v0.2.0` 固定；后续只允许经过测试的维护提交，不能把 upstream `main` 当作 ApexOracle
+  论文生成实现。
 
 ## 当前 Git 状态与保护规则
 
 ### 已验证事实
 
-- 审计时 `HEAD`、本地 `main` 和 `origin/main` 均为 upstream commit `edb0f8c28b7caeb4ea7a06a2fee8d74ab6da1661`（`Clean up`）。
-- 当前工作树已有大量作者历史改动和未跟踪文件；ApexOracle 的关键定制实现尚未形成独立、干净的 commit。
+- 重构开始时 `HEAD`、本地 `main` 和上游 `origin/main` 均为 commit
+  `edb0f8c28b7caeb4ea7a06a2fee8d74ab6da1661`（`Clean up`）；这是历史基线，不是当前公开 fork 状态。
+- 重构开始时存在的大量作者历史改动已由 source-only recovery tag、ledger 和 clean commits 接管；
+  checkpoint、cache、outputs 与数据始终未进入 Git。
 - `/data2/tianang/projects/discrete-diffusion-guidance` 与 `node002:/data1/tianang/Projects/discrete-diffusion-guidance` 的部分关键文件内容不同，说明两台机器保存了不同历史阶段。
 - **2026-08-10 source-only 恢复点已建立：** commit
   `2368c25ce831c187e5b2699b85a6ae1a4cdca31a`、annotated tag
-  `legacy-code-snapshot-2026-08-10`；cache、outputs、checkpoint、数据和论文 PDF 均未纳入。当前只有上游
-  `origin`，branch/tag 尚未 push，严禁推到 `kuleshov-group`。
+  `legacy-code-snapshot-2026-08-10`；cache、outputs、checkpoint、数据和论文 PDF 均未纳入。该 annotated
+  tag 已推送 ApexOracle public fork；上游 `kuleshov-group` 未接收任何 ApexOracle commit。
 - **2026-08-10 MDLM integration 已验证：**三个 ApexOracle predictor 家族改用
   `apexoracle_mdlm.models.FirstTokenCrossAttention`、`RegressionHead` 和 canonical embedding loaders；无 live
   caller 的 `models/antibiotic_classifier.py` duplicate 已由 snapshot 保存后从 active tree 删除。正式权重下
