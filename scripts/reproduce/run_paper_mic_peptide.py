@@ -133,9 +133,11 @@ def validate_roots_and_assets(
     condition_records = compact_conditions if asset_root else CONDITION_DIRECTORIES
     for asset_id, relative, expected_count in condition_records:
         path = (asset_root / relative) if asset_root else (core_root / relative)
-        if not path.is_dir():
+        if not path.is_dir() and expected_count != 0:
             raise NotADirectoryError(path)
-        actual_count = sum(child.is_file() for child in path.iterdir())
+        actual_count = (
+            sum(child.is_file() for child in path.iterdir()) if path.is_dir() else 0
+        )
         if actual_count != expected_count:
             raise ValueError(
                 f"Unexpected {asset_id} file count: {actual_count} != {expected_count}"
@@ -292,13 +294,17 @@ def main() -> None:
     if asset_root:
         if args.strain != "BAA-3170":
             raise ValueError("The released compact asset bundle supports only BAA-3170")
+        text_only_path = asset_root / "conditions/text_only"
+        if not text_only_path.is_dir():
+            text_only_path = output_dir / "_empty_text_only_embeddings"
+            text_only_path.mkdir(parents=True)
         runtime_assets = {
             "dlm": asset_root / COMPACT_ASSETS["dlm_generator"][0],
             "mic": asset_root / COMPACT_ASSETS["noisy_mic_guidance"][0],
             "peptide": asset_root / COMPACT_ASSETS["noisy_peptide_classifier"][0],
             "genome": asset_root / "conditions/genome",
             "atcc_text": asset_root / "conditions/atcc_text",
-            "text_only": asset_root / "conditions/text_only",
+            "text_only": text_only_path,
         }
     else:
         runtime_assets = {

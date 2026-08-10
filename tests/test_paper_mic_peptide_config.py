@@ -75,8 +75,6 @@ def test_compact_asset_bundle_contract(tmp_path: Path) -> None:
         path = tmp_path / relative
         path.mkdir(parents=True)
         (path / "Escherichia_coli_ATCC_BAA_3170.pt").write_bytes(b"tensor")
-    (tmp_path / "conditions/text_only").mkdir(parents=True)
-
     records = launcher.validate_roots_and_assets(
         ROOT,
         mdlm_root,
@@ -87,6 +85,8 @@ def test_compact_asset_bundle_contract(tmp_path: Path) -> None:
 
     assert len(records) == 6
     assert {record["owner"] for record in records} == {"compact_asset_bundle"}
+    text_only = next(record for record in records if record["id"] == "text_only_embeddings")
+    assert text_only["file_count"] == 0
 
 
 def test_launcher_requires_a_new_output_directory(tmp_path: Path) -> None:
