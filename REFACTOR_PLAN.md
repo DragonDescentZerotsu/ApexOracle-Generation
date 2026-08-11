@@ -1,5 +1,9 @@
 # ApexOracle-Generation 重构计划
 
+2026-08-11 文件系统复核确认 active tree 无 nonignored untracked file、无仓库内 >=1 KiB exact duplicate；
+ApexOracle 专用入口继续只保留在 `scripts/reproduce/`。补齐本地 Python build/cache/checkpoint ignore 只影响
+工作区整洁度，不改变 sampler、配置、checkpoint 或输出契约。
+
 ## 目标与边界
 
 本仓库作为统一 ApexOracle super-repo 的独立 `ApexOracle-Generation` submodule，保留上游离散扩散实现和
