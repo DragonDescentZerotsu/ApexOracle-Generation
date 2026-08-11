@@ -192,8 +192,8 @@ and control label satisfaction (e.g., mean value of novel generated molecules fo
 
 The scripts for these evaluations can be found in the [`guidance_eval/`](./guidance_eval) directory.
 To run these evaluations, please refer to the following shell scripts:
-- QM9: [`eval_qm9_guidance.sh`](./guidance_eval/eval_qm9_guidance.sh)
-- Species10: [`eval_ten_species_guidance.sh`](./guidance_eval/eval_ten_species_guidance.sh)
+- QM9: [`eval_qm9_guidance.sh`](./scripts/eval_qm9_guidance.sh)
+- Species10: [`eval_ten_species_guidance.sh`](./scripts/eval_ten_species_guidance.sh)
   - For this dataset, we also evaluate the accuracy of a HyenaDNA classifier on correctly classifying generated sequences.
     This model can be trained using [`train_ten_species_eval_classifier.sh`](./scripts/train_ten_species_eval_classifier.sh).
     - To see how this trained evaluation classifier performs on the validation set of the original data use this notebook [`eval_hyenadna_classifier.ipynb`](./notebooks/eval_hyenadna_classifier.ipynb).
