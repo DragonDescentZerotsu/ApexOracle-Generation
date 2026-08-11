@@ -207,9 +207,11 @@ Hydra 配置
 | DLM generator | `/data2/tianang/projects/mdlm/Checkpoints_fangping/last_reg_v1.ckpt` | `a509b94e3780a0848b3f799ccfe754ed07524169973b08d85fdbc597f0592615` |
 | noisy MIC guidance | `/data2/tianang/projects/Synergy/Checkpoints/genome_text_learnable_emb/guidance_regressor_pad_no_mask/noise_guidance_best_R2_all_peptide_epoch_100.pth` | `f24faf670b804edebbd4d6530a42c1351b62040046e14ebded67335aefc9c3a4` |
 | noisy peptide classifier | `/data2/tianang/projects/mdlm/cls-guide-pad-no-mask-checkpoints/epoch-epoch=1-step-step=134000-train_loss-train_loss=0.008.ckpt` | `40f638ca5668f20a641a538035015b1741ab69cded300cba27f7148cc291945b` |
-| clean MIC reporting model | `/data2/tianang/projects/Synergy/Checkpoints/genome_text_learnable_emb/guidance_regressor_non_pad_clean/noise_guidance_best_R2_all_peptide_epoch_13.pth` | `c0d7c2be49ef179a25a19dcd9c54c592c282b6961e51aff60e95fabc13786802` |
+| fixed-`t=1e-3` MIC reporting model | `/data2/tianang/projects/Synergy/Checkpoints/genome_text_learnable_emb/guidance_regressor_non_pad_t1e-3/mic_candidate_scorer_all_peptide_non_pad_t1e-3_epoch13.pth` | `c0d7c2be49ef179a25a19dcd9c54c592c282b6961e51aff60e95fabc13786802` |
 
-已验证的设计边界：生成 guidance 使用 noisy predictor；Mac 上的历史最终评估脚本使用 clean-data MIC model 做生成后预测。这两种 predictor 的用途不能混写。
+已验证的设计边界：生成 guidance 使用 random-time noisy predictor；Mac 上的历史最终评估脚本使用
+fixed-`t=1e-3` MIC model 做生成后预测。这两种 predictor 的用途不能混写。旧资产名中的 `clean`/`noise`
+只是历史命名，canonical 路径已按真实 protocol 修正；旧名仅由 MDLM provenance 保留。
 
 Genome embedding 和 strain text embedding 当前通过 Synergy 路径读取。它们是输入资产，不得由本仓库的清理过程重新计算、覆盖或就地更名。
 
@@ -229,7 +231,7 @@ Genome embedding 和 strain text embedding 当前通过 Synergy 路径读取。�
 - strain-conditioned noisy MIC guidance。
 - noisy peptide/non-peptide guidance。
 - 256-step 三阶段 CBG/remasking 协议。
-- BAA-3170/BAA-3197 相关早期运行和后续 clean MIC model 评估。
+- BAA-3170/BAA-3197 相关早期运行和后续 fixed-`t=1e-3` MIC model 评估。
 
 ### 论文后或尚未确认的扩展
 

@@ -82,6 +82,13 @@ PYTHONPATH=/path/to/ApexOracle-MDLM/src \
 - [x] clean implementation commit `80d9a2cf9b0921f29e4a44edf5557ccac39f5af9` 已由 ApexOracle
   `v0.2.0` source release 固定。
 
+### G5：downstream reporting scorer 命名同步——完成
+
+- [x] 根据 MDLM producer 源码把历史 `clean` 口径修正为 fixed-`t=1e-3`，不再暗示精确 `t=0`；
+- [x] Generation 资产说明改用 canonical scorer 路径，同时保留其不变 SHA-256；
+- [x] 确认 sampler 仍加载独立的 random-time `noisy_padding_preserved` guidance checkpoint，本批没有改变
+  sampler 配置、数学或公开 Hugging Face bundle。
+
 ## 变更控制
 
 - 每批只改变一个可验证 contract，不同时修改 sampler 数学和目录结构。
