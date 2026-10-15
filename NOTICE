@@ -9,6 +9,5 @@ ApexOracle-specific modifications add SELFIES generation with MIC and peptide
 guidance, a remasking schedule, portable release launchers, and integration with
 the separately distributed ApexOracle-MDLM and ApexOracle-Core modules.
 
-Model weights, datasets, tokenizer assets, and other external dependencies are
-not included in this source repository and remain subject to their respective
-licenses and terms.
+Model weights, datasets, tokenizer assets, and other external dependencies
+remain subject to their respective licenses and terms.

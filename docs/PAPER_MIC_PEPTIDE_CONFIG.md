@@ -1,6 +1,6 @@
 # ApexOracle 论文 MIC+peptide portable config
 
-## 发布入口
+## 运行入口
 
 Canonical launcher 为：
 
@@ -32,10 +32,10 @@ sampler、guidance strength 或 remasking schedule。
   Gaussian sigma `0.5 -> 0.2`、`t_on/t_off=0.55/0.45`、remasking eta `0.02`、alpha `0.5` 和
   MIC/peptide guidance `15/15`。
 - DLM、noisy MIC、noisy peptide checkpoint 路径分别从显式 MDLM/Core root 解析；genome/text embeddings
-  从显式 Core root 解析。preset 本身不含作者机器绝对路径。
+  从显式 Core root 解析。
 - `reproducibility/full_sampler_mdlm_parity.json` 已验证 canonical MDLM integration 完成同一 schedule 的
   256-step full sampler；legacy sampler 自身不具备同 seed bitwise determinism，因此最终 token byte equality
-  不是发布 gate。
+  不作为运行等价性判据。
 - portable launcher 已完成 `--smoke`：正式三类 checkpoint 与 condition assets 成功加载，1 条
   token-level complete SELFIES 完成 256 steps，进程 exit code 为 0。该随机样本未通过后续 RDKit/peptide
   filter，因此 canonical 文本为 0 rows、图片为 0；这验证 runtime/output contract，不验证 candidate yield、
@@ -45,10 +45,10 @@ sampler、guidance strength 或 remasking schedule。
   bundle 已通过全部 SHA-256、resolved-config dry-run 和真实 H100 256-step smoke（exit 0、1 complete
   SELFIES）；这验证裁剪后 runtime 等价边界，不增加 deterministic 或 activity 声明。
 
-## 发布边界
+## 协议范围
 
-这是论文 MIC+peptide 主路径，不包含 `cbg_synergy.yaml` 或 `DIT_Syn_Cls_Pep_Cls_AMP`。synergy generation
-继续保留为明确标注的 experimental extension，不会由本 preset 隐式启用。
+该 preset 使用论文 MIC+peptide 协议。Synergy generation 使用独立的 experimental extension
+配置 `cbg_synergy.yaml` 和 `DIT_Syn_Cls_Pep_Cls_AMP`。
 
 资产 hash、输出安全合同和协议数值的机器可读版本见
 `reproducibility/paper_mic_peptide_protocol.json`。发布仓库为
@@ -77,4 +77,4 @@ python scripts/reproduce/run_mic_peptide_grid.py \
 
 同一 GPU 的 jobs 顺序运行，不同 GPU queues 并行。每个 job 仍调用本页的 canonical launcher，拥有独立的新
 output directory，并记录 resolved command。任意非论文默认 strain 都必须显式给出 `target_length`；这个入口
-只是一项通用实验能力，不能把未来的项目数据或结果混入本仓库。
+用于参数化的多菌株实验。
