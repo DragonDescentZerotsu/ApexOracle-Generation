@@ -18,3 +18,14 @@ wandb/
 *.pt
 *.pth
 *.safetensors
+
+# Local agent instructions, internal plans, and manuscript working records.
+AGENTS.md
+CLAUDE.md
+REFACTOR_PLAN.md
+PUBLICATION_HANDOFF.md
+*[Rr][Ee][Vv][Ii][Ee][Ww][Ee][Rr]*[Rr][Ee][Ss][Pp][Oo][Nn][Ss][Ee]*.md
+*[Dd][Rr][Aa][Ff][Tt]*.md
+*MANUSCRIPT*PLAN*.md
+.local/
+/docs/G3_LEGACY_CLEANUP.md
