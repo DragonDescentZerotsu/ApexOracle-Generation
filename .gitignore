@@ -29,3 +29,7 @@ PUBLICATION_HANDOFF.md
 *MANUSCRIPT*PLAN*.md
 .local/
 /docs/G3_LEGACY_CLEANUP.md
+
+# Local internal records; keep originals outside version control.
+/docs/LEGACY_SNAPSHOT.md
+/docs/MDLM_INTEGRATION.md

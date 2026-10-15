@@ -23,7 +23,7 @@ resolved config 和 `apexoracle_generation_run_manifest.json` 都限制在该新
 `--dry-run`；最小 GPU smoke 加 `--smoke`，后者只将 global batch 和 batch count 改为 `1/1`，不改变 256-step
 sampler、guidance strength 或 remasking schedule。
 
-## 已由代码和历史配置验证的事实
+## 协议与验证范围
 
 - `configs/paper/mic_peptide.yaml` 从
   `outputs/qm9/2025.06.11/235615/.hydra/config.yaml` 提取；该历史文件 SHA-256 为
@@ -36,7 +36,7 @@ sampler、guidance strength 或 remasking schedule。
 - `reproducibility/full_sampler_mdlm_parity.json` 已验证 canonical MDLM integration 完成同一 schedule 的
   256-step full sampler；legacy sampler 自身不具备同 seed bitwise determinism，因此最终 token byte equality
   不是发布 gate。
-- portable launcher 已在 GPU 1 完成 `--smoke`：正式三类 checkpoint 与 condition assets 成功加载，1 条
+- portable launcher 已完成 `--smoke`：正式三类 checkpoint 与 condition assets 成功加载，1 条
   token-level complete SELFIES 完成 256 steps，进程 exit code 为 0。该随机样本未通过后续 RDKit/peptide
   filter，因此 canonical 文本为 0 rows、图片为 0；这验证 runtime/output contract，不验证 candidate yield、
   chemical validity rate 或 activity。
@@ -52,12 +52,11 @@ sampler、guidance strength 或 remasking schedule。
 
 资产 hash、输出安全合同和协议数值的机器可读版本见
 `reproducibility/paper_mic_peptide_protocol.json`。发布仓库为
-`DragonDescentZerotsu/ApexOracle-Generation`；上游 `kuleshov-group` remote 只用于追溯，不接收 ApexOracle
-commits。
+`DragonDescentZerotsu/ApexOracle-Generation`。
 
 ## 论文后多菌株扫描
 
-以后类似 peptide library、strain panel 或长度网格的扫描，不再复制按 GPU 命名的 shell scripts。先建立 CSV：
+peptide library、strain panel 或长度网格扫描使用 CSV 定义任务：
 
 ```csv
 job_id,strain,target_length,device,global_batch_size,num_sample_batches

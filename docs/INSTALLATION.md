@@ -18,7 +18,7 @@ conda activate discdiff
 The ApexOracle path additionally requires a source checkout of `ApexOracle-MDLM` and the external model/data assets
 listed in `docs/PAPER_MIC_PEPTIDE_CONFIG.md`. The portable launcher adds `<mdlm-root>/src` to `PYTHONPATH`; it does not
 copy MDLM code into this repository. `ApexOracle-Core` owns the condition embeddings and MIC guidance checkpoint.
-The future ApexOracle super-repo is responsible for locking compatible commits of all three modules.
+The ApexOracle super-repo is responsible for locking compatible commits of all three modules.
 
 ## Source-only validation
 
